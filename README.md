@@ -22,6 +22,7 @@ Install any of them:
 | `dortort` | NotebookLM, Terraform, YouTube, and image generation skills | [`dortort/skills`](https://github.com/dortort/skills) | `/dortort:<skill-name>` |
 | `artifact-callbacks` | Clicks on HTML pages Claude writes become follow-up prompts in the running session (loopback only) | [`plugins/artifact-callbacks`](plugins/artifact-callbacks) | `/callbacks` |
 | `artifact-callbacks-channel` | The same, as a research-preview channel: clicks arrive as `<channel>` messages through the same listener | [`plugins/artifact-callbacks-channel`](plugins/artifact-callbacks-channel) | Tools `callbacks_done`, `callbacks_reply`, `callbacks_pause` and more |
+| `taint-guard` | Remembers which sensitive or untrusted sources entered a session and refuses risky tool calls once they have | [`plugins/taint-guard`](plugins/taint-guard) | `/taintguard` |
 
 The scheduler requires Node.js >= 18, the Claude Code CLI, and macOS or Linux.
 See its [documentation](plugins/scheduler/README.md) for commands and configuration.
@@ -34,6 +35,12 @@ plugin:artifact-callbacks-channel@dortort`) is a research-preview alternative fo
 where mods don't load, or when clicks should reach Claude mid-turn; see
 [Mod or channel build?](plugins/artifact-callbacks/README.md#mod-or-channel-build) and its
 [documentation](plugins/artifact-callbacks-channel/README.md).
+TaintGuard is a mod that needs Claude Code **2.1.287+ in the terminal** or **2.1.286+ in
+Desktop's Code tab** and nothing else at runtime (no Node.js); its catalog entry arrives
+with its first promoted release, so until then load it with
+`claude --plugin-dir ./plugins/taint-guard`. See its
+[documentation](plugins/taint-guard/README.md) and, for organizations, the
+[deployment guide](plugins/taint-guard/docs/deployment.md).
 Skills remain in their own repository so they can also be copied or used with other
 tools that support their format and dependencies.
 
@@ -49,6 +56,12 @@ plugins/
     skills/                     interactive-artifacts authoring skill
     test/                       node:test suites (*.spec.ts) and docs checks
   artifact-callbacks-channel/   channel build: stdio MCP server (server/), synced copy of the listener (sidecar/)
+  taint-guard/                  TaintGuard mod: session taint tracking that refuses risky tool calls
+    hooks/                      hooks module (register.tsx, support.ts)
+    src/                        policy engine, presets, state, audit log and report text
+    presets/, schema/           generated preset policies and the policy JSON Schema
+    tests/                      hooks suites (*.test.ts) and node:test unit suites (unit/*.spec.ts)
+    docs/                       organization deployment guide
 ```
 
 Claude-specific plugins and mods live under `plugins/`. The marketplace installs
@@ -89,6 +102,17 @@ For Artifact Callbacks, see its [development notes](plugins/artifact-callbacks/R
 
 ```bash
 cd plugins/artifact-callbacks
+npm ci
+npm run typecheck
+npm test
+npm run validate
+npm run test:hooks
+```
+
+For TaintGuard, see its [development notes](plugins/taint-guard/README.md#development):
+
+```bash
+cd plugins/taint-guard
 npm ci
 npm run typecheck
 npm test
