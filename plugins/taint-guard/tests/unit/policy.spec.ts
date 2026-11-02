@@ -869,6 +869,68 @@ describe('loadPolicy: globals', () => {
     assert.equal(policy.userDeclassifyFrom, 'user')
   })
 
+  const weakUser = { mode: 'audit', userDeclassify: 'allow', onUnknownHistory: 'ignore', sinks: [sinkRule('mine', { when: {} })] }
+  const floorWarnings = [
+    'user policy cannot lower mode below the managed floor; the value is ignored',
+    'user policy cannot lower userDeclassify below the managed floor; the value is ignored',
+    'user policy cannot lower onUnknownHistory below the managed floor; the value is ignored',
+  ]
+
+  it('without a managed floor a user layer may lower the globals', () => {
+    const { policy, warnings } = load({ preset: 'trifecta', user: file('user', base(weakUser)) }, PRESETS)
+    assert.deepEqual([policy.mode, policy.userDeclassify, policy.onUnknownHistory], ['audit', 'allow', 'ignore'])
+    assert.deepEqual(warnings, [])
+  })
+
+  for (const [name, input] of [
+    ['managedFloor', { managedFloor: true }],
+    ['presetFromManaged', { presetFromManaged: true }],
+  ] as const) {
+    it(`with ${name} a user layer cannot lower the globals below the managed floor`, () => {
+      const { policy, warnings } = load({ preset: 'trifecta', ...input, user: file('user', base(weakUser)) }, PRESETS)
+      assert.deepEqual(
+        [policy.mode, policy.userDeclassify, policy.userDeclassifyFrom, policy.onUnknownHistory],
+        ['enforce', 'confirm', 'default', 'assume-tainted'],
+      )
+      assert.deepEqual(warnings, floorWarnings)
+      assert.deepEqual(policy.sinks.map((s) => `${s.id}:${s.action}`), ['user:mine:deny', 'preset:outbound:ask'])
+      assert.equal(evaluateSinks(policy, call('Bash'), set('private', 'untrusted')).action, 'deny')
+    })
+  }
+
+  it('with a managed floor the floor comes from the managed and preset layers, and the user may tighten', () => {
+    const floorOf = (layers: { managed?: Record<string, unknown>; preset?: Record<string, unknown>; user: Record<string, unknown> }) =>
+      load(
+        {
+          preset: 'trifecta',
+          managedFloor: true,
+          user: file('user', base(layers.user)),
+          ...(layers.managed ? { managed: file('managed', base(layers.managed)) } : {}),
+        },
+        { ...PRESETS, trifecta: base(layers.preset ?? {}) as unknown as PolicyFile },
+      )
+    const lowManaged = floorOf({ managed: { mode: 'audit', userDeclassify: 'allow' }, user: { mode: 'ask' } })
+    assert.deepEqual([lowManaged.policy.mode, lowManaged.policy.userDeclassify, lowManaged.policy.userDeclassifyFrom], ['ask', 'allow', 'managed'])
+    assert.deepEqual(lowManaged.warnings, [])
+    const lowPreset = floorOf({ preset: { onUnknownHistory: 'ignore' }, user: { onUnknownHistory: 'ignore' } })
+    assert.equal(lowPreset.policy.onUnknownHistory, 'ignore')
+    assert.deepEqual(lowPreset.warnings, [])
+    const belowManaged = floorOf({ managed: { mode: 'ask' }, user: { mode: 'audit', userDeclassify: 'never' } })
+    assert.deepEqual([belowManaged.policy.mode, belowManaged.policy.userDeclassify, belowManaged.policy.userDeclassifyFrom], ['ask', 'never', 'user'])
+    assert.deepEqual(belowManaged.warnings, [floorWarnings[0]])
+  })
+
+  it('with a managed floor a project layer still only tightens', () => {
+    const { policy, warnings } = load({
+      managedFloor: true,
+      managed: file('managed', base({ mode: 'ask' })),
+      user: file('user', base({ mode: 'ask' })),
+      project: file('project', base({ mode: 'audit', userDeclassify: 'never' })),
+    })
+    assert.deepEqual([policy.mode, policy.userDeclassify, policy.userDeclassifyFrom], ['ask', 'never', 'project'])
+    assert.deepEqual(warnings, ['project policy cannot lower mode; the value is ignored'])
+  })
+
   const resetCases: Array<[string, Parameters<typeof globalsOf>[0], boolean, number]> = [
     ['managed value wins', { managed: { resetOnClear: false }, user: { resetOnClear: true } }, false, 0],
     ['user value without managed', { user: { resetOnClear: false } }, false, 0],
