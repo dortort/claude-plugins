@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "description": "Switch off web tainting and a managed sink; add a project rule",
+  "labels": {
+    "internal": {
+      "description": "Internal tickets"
+    }
+  },
+  "sources": [
+    {
+      "id": "preset:web-content",
+      "enabled": false
+    },
+    {
+      "id": "jira-read",
+      "match": {
+        "tool": {
+          "prefix": "mcp__jira__get",
+          "flags": "i"
+        }
+      },
+      "taints": [
+        "internal"
+      ]
+    }
+  ],
+  "sinks": [
+    {
+      "id": "managed:no-shell",
+      "enabled": false
+    },
+    {
+      "id": "project:old-rule",
+      "enabled": false
+    },
+    {
+      "id": "user:legacy.v2_rule",
+      "enabled": false
+    }
+  ]
+}

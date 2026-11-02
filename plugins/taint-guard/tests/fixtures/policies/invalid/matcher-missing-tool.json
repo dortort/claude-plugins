@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "labels": {
+    "private": {
+      "description": "Private"
+    }
+  },
+  "sources": [
+    {
+      "id": "src",
+      "match": {
+        "arguments": []
+      },
+      "taints": [
+        "private"
+      ]
+    }
+  ],
+  "sinks": [
+    {
+      "id": "snk",
+      "when": {
+        "anyOf": [
+          "private"
+        ]
+      },
+      "block": [
+        {
+          "tool": {
+            "exact": "Bash"
+          }
+        }
+      ],
+      "action": "deny",
+      "reason": "no"
+    }
+  ]
+}

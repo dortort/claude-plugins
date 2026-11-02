@@ -1,0 +1,443 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/dortort/claude-plugins/main/plugins/taint-guard/schema/taint-guard.schema.json",
+  "title": "TaintGuard policy",
+  "description": "A TaintGuard policy layer: labels, the sources that add them to a session, and the sinks refused or asked while they are present.",
+  "type": "object",
+  "required": [
+    "version",
+    "labels"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "The JSON Schema this file follows."
+    },
+    "version": {
+      "const": 1,
+      "description": "Policy format version. Only 1 is valid."
+    },
+    "description": {
+      "type": "string",
+      "description": "What this policy is for."
+    },
+    "mode": {
+      "enum": [
+        "enforce",
+        "ask",
+        "audit"
+      ],
+      "description": "enforce applies each sink's action; ask turns every deny into ask; audit turns every action into audit (dry run). Default enforce; the strictest layer wins."
+    },
+    "subagents": {
+      "const": "shared",
+      "description": "Subagents share the session's taint set. The only value in version 1."
+    },
+    "resetOnClear": {
+      "type": "boolean",
+      "description": "Empty the taint set on /clear. Default true; honoured only from the managed or user layer."
+    },
+    "userDeclassify": {
+      "enum": [
+        "allow",
+        "confirm",
+        "never"
+      ],
+      "description": "Whether /taintguard clear works, and whether it asks first. Default confirm; the strictest layer wins."
+    },
+    "onUnknownHistory": {
+      "enum": [
+        "assume-tainted",
+        "ignore"
+      ],
+      "description": "What a rebuild does when the conversation history may be cut. Default assume-tainted; the strictest layer wins."
+    },
+    "labels": {
+      "type": "object",
+      "description": "The labels this layer declares, at least one. Names: letters, digits and -, 1 to 32 characters.",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/labelName"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "What data carries this label."
+          }
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "description": "Rules that add labels to the session when a tool call matches, or references that switch such rules off.",
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/sourceRule"
+          },
+          {
+            "$ref": "#/$defs/ruleRef"
+          }
+        ]
+      }
+    },
+    "sinks": {
+      "type": "array",
+      "description": "Rules that refuse, ask about or log tool calls while labels are present, or references that switch such rules off.",
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/sinkRule"
+          },
+          {
+            "$ref": "#/$defs/ruleRef"
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "labelName": {
+      "type": "string",
+      "description": "A label name: letters, digits and -, 1 to 32 characters.",
+      "pattern": "^[A-Za-z0-9-]{1,32}$"
+    },
+    "labelNames": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/labelName"
+      }
+    },
+    "ruleId": {
+      "type": "string",
+      "description": "A rule id, unique within its layer: letters, digits, ., _ and -, 1 to 64 characters.",
+      "pattern": "^[A-Za-z0-9._-]{1,64}$"
+    },
+    "ruleRef": {
+      "type": "object",
+      "title": "Rule reference",
+      "description": "Switches off a rule by its namespaced id, when this layer may disable that layer's rules.",
+      "required": [
+        "id",
+        "enabled"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The namespaced id of the rule to switch off, such as preset:web-content.",
+          "pattern": "^(preset|managed|user|project):[A-Za-z0-9._-]{1,64}$"
+        },
+        "enabled": {
+          "const": false,
+          "description": "Always false: a reference only switches a rule off."
+        }
+      }
+    },
+    "sourceRule": {
+      "type": "object",
+      "title": "Source rule",
+      "description": "Adds labels to the session when a tool call matches.",
+      "required": [
+        "id",
+        "match",
+        "taints"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ruleId"
+        },
+        "description": {
+          "type": "string",
+          "description": "What this source covers."
+        },
+        "match": {
+          "$ref": "#/$defs/matcher",
+          "description": "The tool calls that fire this source."
+        },
+        "on": {
+          "enum": [
+            "attempt",
+            "success"
+          ],
+          "default": "attempt",
+          "description": "attempt fires when the call is made, even if it is refused or fails; success fires only when it returns without error."
+        },
+        "taints": {
+          "type": "array",
+          "description": "The labels added, at least one.",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/labelName"
+          }
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Default true."
+        }
+      }
+    },
+    "sinkRule": {
+      "type": "object",
+      "title": "Sink rule",
+      "description": "Refuses, asks about or logs matching tool calls while its labels are present.",
+      "required": [
+        "id",
+        "when",
+        "block"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ruleId"
+        },
+        "description": {
+          "type": "string",
+          "description": "What this sink guards."
+        },
+        "when": {
+          "type": "object",
+          "description": "When the sink is active: anyOf holds when any listed label is present, allOf when all are; both present means both must hold; an empty object means always.",
+          "additionalProperties": false,
+          "properties": {
+            "anyOf": {
+              "$ref": "#/$defs/labelNames",
+              "description": "Active when any of these labels is present."
+            },
+            "allOf": {
+              "$ref": "#/$defs/labelNames",
+              "description": "Active when all of these labels are present."
+            }
+          }
+        },
+        "block": {
+          "type": "array",
+          "description": "The tool calls this sink acts on, at least one matcher.",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/matcher"
+          }
+        },
+        "except": {
+          "type": "array",
+          "description": "Tool calls exempt from this sink even when a block matcher matches.",
+          "items": {
+            "$ref": "#/$defs/matcher"
+          }
+        },
+        "action": {
+          "enum": [
+            "deny",
+            "ask",
+            "audit"
+          ],
+          "default": "deny",
+          "description": "deny refuses the call; ask asks the user; audit only logs it."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Shown to Claude and the user when the sink acts, at most 1,000 characters.",
+          "maxLength": 1000
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Default true."
+        }
+      }
+    },
+    "matcher": {
+      "type": "object",
+      "description": "A tool selector plus optional argument predicates; all must hold.",
+      "required": [
+        "tool"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tool": {
+          "$ref": "#/$defs/selector"
+        },
+        "arguments": {
+          "type": "array",
+          "description": "Predicates on the call's arguments, all of which must hold.",
+          "items": {
+            "$ref": "#/$defs/predicate"
+          }
+        }
+      }
+    },
+    "selector": {
+      "description": "Selects tools by name: exactly one of exact, prefix, regex or anyOf; flags \"i\" only with prefix or regex.",
+      "oneOf": [
+        {
+          "type": "object",
+          "title": "Exact name",
+          "required": [
+            "exact"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "exact": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The tool's full name."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "title": "Name prefix",
+          "required": [
+            "prefix"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "prefix": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The start of the tool's name."
+            },
+            "flags": {
+              "$ref": "#/$defs/flags"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "title": "Name pattern",
+          "required": [
+            "regex"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "regex": {
+              "type": "string",
+              "format": "regex",
+              "description": "An ECMAScript regular expression tested against the tool's name; anchor it yourself."
+            },
+            "flags": {
+              "$ref": "#/$defs/flags"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "title": "Any of these names",
+          "required": [
+            "anyOf"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "anyOf": {
+              "type": "array",
+              "minItems": 1,
+              "description": "Tool names, any of which matches.",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "flags": {
+      "const": "i",
+      "description": "i makes the match case-insensitive."
+    },
+    "pointer": {
+      "type": "string",
+      "description": "A JSON Pointer (RFC 6901) into the call's arguments, such as /file_path; empty for the whole arguments object.",
+      "pattern": "^(/.*)?$"
+    },
+    "predicate": {
+      "description": "A test on one argument: exactly one of equals, matches, notMatches or exists; flags \"i\" only with matches or notMatches.",
+      "oneOf": [
+        {
+          "type": "object",
+          "title": "Equals",
+          "required": [
+            "pointer",
+            "equals"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "pointer": {
+              "$ref": "#/$defs/pointer"
+            },
+            "equals": {
+              "description": "Holds when the value at the pointer is deeply equal to this JSON value."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "title": "Matches",
+          "required": [
+            "pointer",
+            "matches"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "pointer": {
+              "$ref": "#/$defs/pointer"
+            },
+            "matches": {
+              "type": "string",
+              "format": "regex",
+              "description": "Holds when the value is present and its text matches this regular expression (non-strings are tested as their JSON)."
+            },
+            "flags": {
+              "$ref": "#/$defs/flags"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "title": "Does not match",
+          "required": [
+            "pointer",
+            "notMatches"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "pointer": {
+              "$ref": "#/$defs/pointer"
+            },
+            "notMatches": {
+              "type": "string",
+              "format": "regex",
+              "description": "Holds when the value is absent or its text does not match this regular expression."
+            },
+            "flags": {
+              "$ref": "#/$defs/flags"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "title": "Exists",
+          "required": [
+            "pointer",
+            "exists"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "pointer": {
+              "$ref": "#/$defs/pointer"
+            },
+            "exists": {
+              "type": "boolean",
+              "description": "true holds when the pointer resolves; false when it does not."
+            }
+          }
+        }
+      ]
+    }
+  }
+}

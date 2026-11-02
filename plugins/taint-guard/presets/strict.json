@@ -1,0 +1,153 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dortort/claude-plugins/main/plugins/taint-guard/schema/taint-guard.schema.json",
+  "version": 1,
+  "description": "Refuse every outbound or file-changing tool once any label is present",
+  "labels": {
+    "private": {
+      "description": "Data the user owns: mail, documents, chats"
+    },
+    "untrusted": {
+      "description": "Text written by third parties"
+    },
+    "secret": {
+      "description": "Credentials and keys"
+    }
+  },
+  "sources": [
+    {
+      "id": "private-read",
+      "description": "A read verb on a mail, documents or chat MCP server",
+      "match": {
+        "tool": {
+          "regex": "^mcp__(?=(?:[^_]|_(?!_))*__(?:[\\s\\S]*[_-])?(?:get|read|search|list|fetch|download|history))(?:[^_]|_(?!_))*?(?:gmail|google_mail|google-mail|googlemail|outlook|mail|drive|gdrive|google_drive|google-drive|docs|google_docs|notion|onedrive|sharepoint|slack|teams|chat)",
+          "flags": "i"
+        }
+      },
+      "on": "attempt",
+      "taints": [
+        "private",
+        "untrusted"
+      ]
+    },
+    {
+      "id": "private-other",
+      "description": "A tool with neither a read nor a write verb on a mail, documents or chat MCP server",
+      "match": {
+        "tool": {
+          "regex": "^mcp__(?=(?:[^_]|_(?!_))*__(?!(?:[\\s\\S]*[_-])?(?:(?:get|read|search|list|fetch|download|history)|(?:send|post|reply|forward|create|update|upload|share|schedule|comment|invite))))(?:[^_]|_(?!_))*?(?:gmail|google_mail|google-mail|googlemail|outlook|mail|drive|gdrive|google_drive|google-drive|docs|google_docs|notion|onedrive|sharepoint|slack|teams|chat)",
+          "flags": "i"
+        }
+      },
+      "on": "attempt",
+      "taints": [
+        "private",
+        "untrusted"
+      ]
+    },
+    {
+      "id": "web-content",
+      "description": "Web pages and search results",
+      "match": {
+        "tool": {
+          "anyOf": [
+            "WebFetch",
+            "WebSearch"
+          ]
+        }
+      },
+      "on": "success",
+      "taints": [
+        "untrusted"
+      ]
+    },
+    {
+      "id": "secret-files",
+      "description": "Reading a secret file",
+      "match": {
+        "tool": {
+          "exact": "Read"
+        },
+        "arguments": [
+          {
+            "pointer": "/file_path",
+            "matches": "(^|[\\\\/])(?:\\.env(?!\\.(?:example|sample|template|dist)$)[^\\\\/]*|id_(?:rsa|dsa|ecdsa|ed25519)|credentials|\\.netrc|\\.pgpass|\\.npmrc|[^\\\\/]*\\.pem|[^\\\\/]*\\.key)$",
+            "flags": "i"
+          }
+        ]
+      },
+      "on": "attempt",
+      "taints": [
+        "secret"
+      ]
+    },
+    {
+      "id": "secret-grep",
+      "description": "Searching a secret file",
+      "match": {
+        "tool": {
+          "exact": "Grep"
+        },
+        "arguments": [
+          {
+            "pointer": "/path",
+            "matches": "(^|[\\\\/])(?:\\.env(?!\\.(?:example|sample|template|dist)$)[^\\\\/]*|id_(?:rsa|dsa|ecdsa|ed25519)|credentials|\\.netrc|\\.pgpass|\\.npmrc|[^\\\\/]*\\.pem|[^\\\\/]*\\.key)$",
+            "flags": "i"
+          }
+        ]
+      },
+      "on": "attempt",
+      "taints": [
+        "secret"
+      ]
+    }
+  ],
+  "sinks": [
+    {
+      "id": "outbound-any",
+      "description": "Outbound and file-changing tools once any label is present",
+      "when": {
+        "anyOf": [
+          "private",
+          "untrusted",
+          "secret"
+        ]
+      },
+      "block": [
+        {
+          "tool": {
+            "exact": "Bash"
+          }
+        },
+        {
+          "tool": {
+            "exact": "WebFetch"
+          }
+        },
+        {
+          "tool": {
+            "regex": "^mcp__(?:[^_]|_(?!_))*__(?:[\\s\\S]*[_-])?(?:send|post|reply|forward|create|update|upload|share|schedule|comment|invite)",
+            "flags": "i"
+          }
+        },
+        {
+          "tool": {
+            "regex": "^mcp__(?=(?:[^_]|_(?!_))*__(?!(?:[\\s\\S]*[_-])?(?:(?:get|read|search|list|fetch|download|history)|(?:send|post|reply|forward|create|update|upload|share|schedule|comment|invite))))(?:[^_]|_(?!_))*?(?:gmail|google_mail|google-mail|googlemail|outlook|mail|drive|gdrive|google_drive|google-drive|docs|google_docs|notion|onedrive|sharepoint|slack|teams|chat)",
+            "flags": "i"
+          }
+        },
+        {
+          "tool": {
+            "anyOf": [
+              "WebSearch",
+              "Write",
+              "Edit",
+              "NotebookEdit"
+            ]
+          }
+        }
+      ],
+      "action": "deny",
+      "reason": "This tool can send data out or change files, and the session holds private, untrusted or secret content."
+    }
+  ]
+}

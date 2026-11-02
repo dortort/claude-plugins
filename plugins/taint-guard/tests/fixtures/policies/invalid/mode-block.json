@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "labels": {
+    "private": {
+      "description": "Private"
+    }
+  },
+  "sources": [
+    {
+      "id": "src",
+      "match": {
+        "tool": {
+          "exact": "Read"
+        },
+        "arguments": [
+          {
+            "pointer": "/file_path",
+            "matches": "x"
+          }
+        ]
+      },
+      "taints": [
+        "private"
+      ]
+    }
+  ],
+  "sinks": [
+    {
+      "id": "snk",
+      "when": {
+        "anyOf": [
+          "private"
+        ]
+      },
+      "block": [
+        {
+          "tool": {
+            "exact": "Bash"
+          }
+        }
+      ],
+      "action": "deny",
+      "reason": "no"
+    }
+  ],
+  "mode": "block"
+}

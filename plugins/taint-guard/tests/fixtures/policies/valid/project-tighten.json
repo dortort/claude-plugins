@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "mode": "ask",
+  "labels": {
+    "customer": {
+      "description": "Customer data from the CRM"
+    }
+  },
+  "sources": [
+    {
+      "id": "crm-read",
+      "match": {
+        "tool": {
+          "regex": "^mcp__crm__",
+          "flags": "i"
+        }
+      },
+      "taints": [
+        "customer"
+      ]
+    }
+  ],
+  "sinks": [
+    {
+      "id": "no-upload",
+      "when": {
+        "anyOf": [
+          "customer"
+        ]
+      },
+      "block": [
+        {
+          "tool": {
+            "regex": "upload",
+            "flags": "i"
+          }
+        }
+      ]
+    }
+  ]
+}
