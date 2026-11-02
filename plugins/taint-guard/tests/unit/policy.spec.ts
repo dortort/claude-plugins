@@ -492,12 +492,54 @@ describe('compileMatcher', () => {
     assert.deepEqual([regex.names, regex.patterns], [[], ['/^mcp__.+__send/i']])
   })
 
-  it('caps text given to a regex at 100,000 characters', () => {
+  it('runs a regex on text up to 100,000 characters', () => {
     const matcher = compileMatcher({ tool: { exact: 'T' }, arguments: [{ pointer: '/a', matches: 'x$' }] })
     assert.equal(matcher.test(call('T', { a: `${'a'.repeat(99_999)}x` })), true)
-    assert.equal(matcher.test(call('T', { a: `${'a'.repeat(100_000)}x` })), false)
-    const negative = compileMatcher({ tool: { exact: 'T' }, arguments: [{ pointer: '/a', notMatches: 'x$' }] })
-    assert.equal(negative.test(call('T', { a: `${'a'.repeat(100_000)}x` })), true)
+    assert.equal(matcher.test(call('T', { a: 'a'.repeat(100_000) })), false)
+    for (const role of ['block', 'source', 'except'] as const) {
+      const negative = compileMatcher({ tool: { exact: 'T' }, arguments: [{ pointer: '/a', notMatches: 'x$' }] }, role)
+      assert.equal(negative.test(call('T', { a: `${'a'.repeat(99_999)}x` })), false, role)
+    }
+  })
+
+  it('fails closed on text over 100,000 characters by role', () => {
+    const long = { a: `${'a'.repeat(100_000)}x`, b: 'b'.repeat(100_001) }
+    const cases: Array<[Matcher['arguments'], 'block' | 'source' | 'except' | undefined, boolean]> = [
+      [[{ pointer: '/a', matches: 'nothing-here' }], undefined, true],
+      [[{ pointer: '/a', matches: 'nothing-here' }], 'block', true],
+      [[{ pointer: '/a', notMatches: 'x$' }], 'block', true],
+      [[{ pointer: '/a', matches: 'nothing-here' }], 'source', true],
+      [[{ pointer: '/a', notMatches: 'x$' }], 'source', true],
+      [[{ pointer: '/a', matches: 'x$' }], 'except', false],
+      [[{ pointer: '/a', notMatches: 'nothing-here' }], 'except', false],
+      [[{ pointer: '', matches: '^\\{' }], 'except', false],
+      [[{ pointer: '/b', matches: '^b' }], 'except', false],
+    ]
+    for (const [args, role, expected] of cases) {
+      const matcher = compileMatcher({ tool: { exact: 'T' }, arguments: args }, role)
+      assert.equal(matcher.test(call('T', long)), expected, JSON.stringify([args, role]))
+    }
+  })
+
+  it('compiles sink and source matchers with their role', () => {
+    const big = { command: `${'a'.repeat(100_000)} curl` }
+    const { policy } = load({
+      user: file(
+        'user',
+        base({
+          sources: [sourceRule('src', { match: { tool: { exact: 'Bash' }, arguments: [{ pointer: '/command', matches: 'never' }] } })],
+          sinks: [
+            sinkRule('snk', {
+              block: [{ tool: { exact: 'Bash' }, arguments: [{ pointer: '/command', matches: 'never' }] }],
+              except: [{ tool: { exact: 'Bash' }, arguments: [{ pointer: '/command', notMatches: 'curl' }] }],
+            }),
+          ],
+        }),
+      ),
+    })
+    assert.deepEqual(matchSources(policy, call('Bash', big), 'attempt').map((s) => s.id), ['user:src'])
+    assert.equal(evaluateSinks(policy, call('Bash', big), set('private')).action, 'deny')
+    assert.equal(evaluateSinks(policy, call('Bash', { command: 'ls' }), set('private')).action, 'allow')
   })
 })
 
