@@ -527,3 +527,15 @@ describe('auditReport', () => {
     assert.equal(auditReport('/a.jsonl', []), 'Audit log: /a.jsonl\n  no entries yet')
   })
 })
+
+describe('toolsSentence pattern wording', () => {
+  it('keeps described patterns as written and marks raw ones', () => {
+    const words = toolsSentence({
+      denied: ['Bash'],
+      asked: [],
+      deniedPatterns: ['MCP tools that send or post', '/^mcp__x__/i', 'mcp__slack…'],
+      askedPatterns: [],
+    })
+    assert.equal(words.refused, 'Bash, MCP tools that send or post, tools matching /^mcp__x__/i, tools matching mcp__slack…')
+  })
+})

@@ -475,3 +475,15 @@ describe('preset regex safety', () => {
     })
   }
 })
+
+describe('describePattern', () => {
+  it('names the preset patterns in plain words and leaves others alone', async () => {
+    const { describePattern, MCP_WRITE_REGEX, PRIVATE_OTHER_REGEX } = await import('../../src/presets.ts')
+    assert.equal(
+      describePattern(`/${MCP_WRITE_REGEX}/i`),
+      'MCP tools that send, post, reply, forward, create, update, upload, share, schedule, comment or invite',
+    )
+    assert.equal(describePattern(`/${PRIVATE_OTHER_REGEX}/i`), 'other tools on mail, documents or chat MCP servers')
+    assert.equal(describePattern('/^mcp__x__/'), '/^mcp__x__/')
+  })
+})

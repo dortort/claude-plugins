@@ -123,10 +123,11 @@ export function askQuestion(input: { tool: string; argSummary: string; reason: s
   return joinSentences(input.reason, holds, `Allow ${call} once?`)
 }
 
-/** Comma lists of refused and asked tools, patterns rendered as "tools matching <pattern>". */
+/** Comma lists of refused and asked tools; a raw /regex/ or prefix… pattern reads "tools matching <pattern>". */
 export function toolsSentence(summary: ActiveSummary): { refused: string; asks: string } {
+  const isRaw = (pattern: string): boolean => pattern.startsWith('/') || pattern.endsWith('…')
   const render = (names: readonly string[], patterns: readonly string[]): string =>
-    [...names, ...patterns.map((pattern) => `tools matching ${pattern}`)].join(', ')
+    [...names, ...patterns.map((pattern) => (isRaw(pattern) ? `tools matching ${pattern}` : pattern))].join(', ')
   return {
     refused: render(summary.denied, summary.deniedPatterns),
     asks: render(summary.asked, summary.askedPatterns),
