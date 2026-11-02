@@ -824,7 +824,14 @@ export function isSinkActive(sink: CompiledSink, labels: ReadonlySet<string>): b
   return allOf.every((label) => labels.has(label))
 }
 
+const TRUST_RANK: readonly LayerName[] = ['managed', 'user', 'preset', 'project']
+
 function decision(matches: SinkMatch[]): SinkDecision {
+  matches.sort(
+    (a, b) =>
+      ACTION_ORDER.indexOf(b.action) - ACTION_ORDER.indexOf(a.action) ||
+      TRUST_RANK.indexOf(a.sink.layer) - TRUST_RANK.indexOf(b.sink.layer),
+  )
   const primary = matches[0]
   return primary === undefined ? { action: 'allow', matches } : { action: primary.action, matches, primary }
 }
@@ -835,7 +842,6 @@ export function evaluateSinks(policy: CompiledPolicy, call: ToolCall, labels: Re
   for (const sink of policy.sinks) {
     if (isSinkActive(sink, labels) && sink.test(call)) matches.push({ sink, action: sink.action })
   }
-  matches.sort((a, b) => ACTION_ORDER.indexOf(b.action) - ACTION_ORDER.indexOf(a.action))
   return decision(matches)
 }
 
