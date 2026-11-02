@@ -352,10 +352,10 @@ async function rebuildTaint($: Dollar, policy: CompiledPolicy, copy: StoredTaint
 
 async function applyRebuild($: Dollar, ctx: Ctx, origin: string, result: RebuildResult, at: number): Promise<void> {
   ctx.knownTools.clear()
-  await update($, taintAtom, () => result.snapshot)
+  const merged = await update($, taintAtom, (current) => unionTaint(current, result.snapshot, at))
   if (result.added.length === 0) return
   append(ctx, at, { event: 'rebuild', labels: result.added, detail: rebuildDetail(origin, result.records, result.truncated) })
-  await saveStore($, ctx, result.snapshot, at)
+  await saveStore($, ctx, merged, at)
 }
 
 async function summaryFor($: Dollar, policy: CompiledPolicy, labels: readonly string[]): Promise<ActiveSummary> {
