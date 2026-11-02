@@ -58,26 +58,34 @@ function fromHex(hex: string): Uint8Array<ArrayBuffer> {
 
 /** A fresh random 256-bit HMAC-SHA-256 key, as 64 hex characters. */
 export async function generateKeyHex(): Promise<string> {
-  const key = await crypto.subtle.generateKey({ name: 'HMAC', hash: 'SHA-256', length: 256 }, true, ['sign'])
-  return toHex(await crypto.subtle.exportKey('raw', key))
+  return toHex(crypto.getRandomValues(new Uint8Array(32)))
 }
 
-const keyCache = new Map<string, Promise<CryptoKey>>()
+const SHA256_BLOCK = 64
 
-function importHmacKey(keyHex: string): Promise<CryptoKey> {
-  let key = keyCache.get(keyHex)
-  if (!key) {
-    key = crypto.subtle.importKey('raw', fromHex(keyHex), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-    keyCache.set(keyHex, key)
-    key.catch(() => keyCache.delete(keyHex))
+async function sha256(...parts: Uint8Array[]): Promise<Uint8Array> {
+  const total = parts.reduce((sum, part) => sum + part.length, 0)
+  const joined = new Uint8Array(new ArrayBuffer(total))
+  let at = 0
+  for (const part of parts) {
+    joined.set(part, at)
+    at += part.length
   }
-  return key
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', joined))
 }
 
-/** HMAC-SHA-256 of the text under the hex key, as hex. */
+/** HMAC-SHA-256 of the text under the hex key, as hex, built on digest (RFC 2104): the hooks runtime has no subtle.sign. */
 export async function hmacHex(keyHex: string, text: string): Promise<string> {
-  const key = await importHmacKey(keyHex)
-  return toHex(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(text)))
+  let key: Uint8Array = fromHex(keyHex)
+  if (key.length > SHA256_BLOCK) key = await sha256(key)
+  const inner = new Uint8Array(SHA256_BLOCK)
+  const outer = new Uint8Array(SHA256_BLOCK)
+  for (let i = 0; i < SHA256_BLOCK; i++) {
+    const byte = key[i] ?? 0
+    inner[i] = byte ^ 0x36
+    outer[i] = byte ^ 0x5c
+  }
+  return toHex(await sha256(outer, await sha256(inner, new TextEncoder().encode(text))))
 }
 
 export function argsSnippet(args: unknown, max: number = ARGS_SNIPPET_MAX): string {
