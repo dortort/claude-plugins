@@ -1,5 +1,4 @@
-// TaintGuard's session state: what it keeps in `$.state` under its own name,
-// so the taint set survives hot reloads of the hooks module.
+// TaintGuard's `$.state` values, which survive hot reloads of the hooks module.
 
 /** One source firing: which rule added which labels, from which call. */
 export type TaintGuardFiring = {
