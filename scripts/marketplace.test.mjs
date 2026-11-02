@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { checkCatalog, pinRelease } from './marketplace.mjs';
+import { checkCatalog, managedPlugins, pinRelease } from './marketplace.mjs';
 
 const original = JSON.parse(readFileSync(new URL('../.claude-plugin/marketplace.json', import.meta.url), 'utf8'));
 const sha = 'a'.repeat(40);
-const pinned = ['scheduler', 'artifact-callbacks', 'artifact-callbacks-channel']
-  .reduce((catalog, name) => pinRelease(catalog, name, { version: '1.2.3', sha }), original);
+const pinned = managedPlugins.reduce((catalog, name) => pinRelease(catalog, name, { version: '1.2.3', sha }), original);
 
 test('accepts release pins without tying them to the moving source versions', () => {
   checkCatalog(pinned);
@@ -19,6 +18,7 @@ test('rejects a moving npm version, branch, relative source, and missing commit'
     catalog => { catalog.plugins.find(p => p.name === 'artifact-callbacks').source = './plugins/artifact-callbacks'; },
     catalog => { delete catalog.plugins.find(p => p.name === 'artifact-callbacks').source.sha; },
     catalog => { catalog.plugins.find(p => p.name === 'artifact-callbacks').source.path = 'plugins/artifact-callbacks-channel'; },
+    catalog => { catalog.plugins.find(p => p.name === 'taint-guard').source.ref = 'artifact-callbacks--v1.2.3'; },
   ]) {
     const candidate = structuredClone(pinned);
     mutate(candidate);
