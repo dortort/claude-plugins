@@ -78,9 +78,15 @@ The taint set lives in the mod's `$.state`, so it survives a save or `/reload-pl
 A copy is kept in `$.store` under `taint:<sessionId>` (copies older than 14 days are
 pruned at session start). After `/resume`, `/branch` or a restart, TaintGuard rebuilds
 the set from the conversation history, including subagent transcripts, replaying sources
-exactly as they fired, and takes the union with the stored copy, so a rebuild can keep or
-add taint but never lose it. When the history may be cut (the API returns at most 4,096
-entries), `onUnknownHistory: "assume-tainted"` adds every label. While tainted, a
+exactly as they fired, and merges the result into the stored copy and into any label added
+while the rebuild ran, so a rebuild can keep or add taint but never lose it. Until the
+rebuild has succeeded, every call is judged as if every label were held; a failed rebuild is
+retried on the next call. When the history may be cut, `onUnknownHistory: "assume-tainted"`
+adds every label. History counts as cut when the API returns its limit of 4,096 entries,
+when the stored copy cannot be read, and when subagent history is unknown: a subagent
+transcript that cannot be read, more than the newest 20 subagents, or a subagent cut at
+4,096 entries. Subagents started before a `/taintguard clear` are not read again, so a
+cleared label does not come back on restart. While tainted, a
 compaction asks the summarizer to keep a one-line taint record
 (`TaintGuard taint record v1: labels=private,untrusted`) and appends the same line to the
 compacted messages, so a later resume or branch finds it. A record can only add labels.
@@ -98,6 +104,13 @@ change over time. They cover local servers and claude.ai connectors
 | mail | `gmail`, `google_mail`, `google-mail`, `googlemail`, `outlook`, `mail` |
 | documents | `drive`, `gdrive`, `google_drive`, `google-drive`, `docs`, `google_docs`, `notion`, `onedrive`, `sharepoint` |
 | chat | `slack`, `teams`, `chat` |
+| web | `fetch`, `browser`, `chrome`, `puppeteer`, `playwright`, `selenium`, `crawl`, `scrape`, `tavily`, `brave`, `web` |
+
+Mail, documents and chat servers hold the user's private data. Web servers read pages
+written by third parties and reach URLs Claude chooses, so every tool on them, whatever
+its verb, is both an `untrusted` source and an outbound tool. No other server is
+classified: GitHub, Jira, Confluence, Linear, Zendesk and other issue trackers and ticket
+systems are not labelled by any preset (see the limitations below).
 
 A verb counts when it starts the tool's name or follows `_` or `-` in it. Read verbs: get,
 read, search, list, fetch, download, history. Write verbs: send, post, reply, forward,
@@ -111,26 +124,54 @@ the same sources:
 | `preset:private-read` | A read verb on a mail, documents or chat server (`gmail_search_messages`, `read_message`, `slack_search_public`) | `attempt` | `private`, `untrusted` |
 | `preset:private-other` | A tool with neither a read nor a write verb on such a server (`apply_label`, `archive`) | `attempt` | `private`, `untrusted` |
 | `preset:web-content` | `WebFetch`, `WebSearch` | `success` | `untrusted` |
+| `preset:web-mcp` | Any tool on a web server (`mcp__fetch__fetch`, `mcp__playwright__browser_navigate`, `mcp__chrome__get_page_text`) | `success` | `untrusted` |
 | `preset:secret-files` | `Read` of a secret file | `attempt` | `secret` |
 | `preset:secret-grep` | `Grep` whose `path` is a secret file | `attempt` | `secret` |
+| `preset:secret-grep-glob` | `Grep` whose `glob` names a secret file (`.env*`, `**/.env`) | `attempt` | `secret` |
 
 Secret files are `.env` and `.env.*` (except `.env.example`, `.env.sample`,
 `.env.template`, `.env.dist`), `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`,
-`credentials`, `.netrc`, `.pgpass`, `.npmrc`, `*.pem` and `*.key`.
+`credentials`, `.git-credentials`, `.netrc`, `.pgpass`, `.npmrc`, `*.pem`, `*.key`, and the
+CLI login stores `gh/hosts.yml`, `.docker/config.json` and `.kube/config`.
 
 The **outbound** tools are `Bash`, `WebFetch`, any MCP tool with a write verb
-(`slack_send_message`, `create_issue`, `upload_file`) and the unknown-verb tools on
-private-data servers, which are therefore both source and sink: the fail-safe answer for
-a tool TaintGuard cannot classify is to taint and to block.
+(`slack_send_message`, `create_issue`, `upload_file`), every tool on a web server, and the
+unknown-verb tools on private-data servers, which are therefore both source and sink: the
+fail-safe answer for a tool TaintGuard cannot classify is to taint and to block. The write
+verbs are the spec's list; an MCP tool named with another verb, such as `push_files` or
+`put_object`, is not outbound.
 
 | Preset | Sinks |
 | --- | --- |
-| `trifecta` (default) | `preset:outbound-secret`: outbound tools are **refused** while `secret` is present. `preset:outbound-private`: outbound tools **ask** while `private` and `untrusted` are both present, except a mail server's `create_draft`. |
+| `trifecta` (default) | `preset:outbound-secret`: outbound tools and `WebSearch` are **refused** while `secret` is present. `preset:outbound-private`: outbound tools **ask** while `private` and `untrusted` are both present, except a mail server's `create_draft`. |
 | `strict` | `preset:outbound-any`: outbound tools, plus `WebSearch`, `Write`, `Edit` and `NotebookEdit`, are **refused** once any label is present. |
 | `none` | No rules; only your policy files apply. |
 
 The generated presets are [presets/trifecta.json](presets/trifecta.json) and
 [presets/strict.json](presets/strict.json).
+
+### What the presets cost on ordinary work
+
+The benign-task eval replays 120 ordinary tasks (90 coding, 30 mail triage) through the
+presets ([results](evals/RESULTS.md#benign-task-eval)). It **misses the spec's targets**:
+
+| Preset | Hit an ask or refusal | Could not finish (asks approved) | Spec target (`trifecta`) |
+| --- | --- | --- | --- |
+| `trifecta` | 18.3% | 2.5% | under 5% and under 1% |
+| `strict` | 40.0% | 40.0% | none |
+
+Under `trifecta` the asks are the preset working as designed: after reading mail it asks
+before replying to, forwarding or labelling mail, before creating a calendar entry and
+before Bash, and in a coding task it asks before Bash after reading Slack or Notion. The
+tasks that could not finish read `.env` (or a test certificate, `*.pem`) and then needed
+Bash, which the `secret` rule refuses until you run `/taintguard clear`. Under `strict`
+every web lookup, mail read and Slack or Notion read ends Bash, `Write` and `Edit`.
+
+If that is too much friction for your work, write a user policy that switches off the
+preset rule that gets in the way, such as
+`{ "id": "preset:outbound-private", "enabled": false }` in `sinks`, and add a narrower sink
+of your own; or set `preset` to `none` and write all the rules yourself. Neither works where
+managed settings set a preset: an organization's floor is not yours to lower.
 
 ## Options
 
@@ -181,6 +222,12 @@ A repository is untrusted input, so the merge lets a lower-trust layer only tigh
   `userDeclassify`: never > confirm > allow (default confirm). `onUnknownHistory`:
   assume-tainted > ignore (default assume-tainted). A project layer cannot lower any of
   them below what the trusted layers, or the defaults, give.
+- **The managed floor.** When managed settings lock TaintGuard on (`enabled: true`) or set
+  a `preset`, `mode`, `userDeclassify` and `onUnknownHistory` come from the managed layer,
+  the preset and the defaults alone. The user layer can then only tighten them: a user
+  `mode: "audit"`, `userDeclassify: "allow"` or `onUnknownHistory: "ignore"` is ignored
+  with a warning. Without managed settings, the user layer may lower them for its own
+  sessions.
 - **`resetOnClear`** comes from the managed layer, else the user layer, else `true`; a
   project value is ignored with a warning. **`subagents`** is `shared`, the only v1 value.
 - **The managed path** comes only from managed settings, so no user or project file can
@@ -188,8 +235,10 @@ A repository is untrusted input, so the merge lets a lower-trust layer only tigh
 
 **Validation and lockdown.** Each layer is validated at session start and on
 `/taintguard reload`: the schema, unknown label names, duplicate ids within a layer and
-regexes that fail to compile. A project layer may not use a regex that nests unbounded
-quantifiers. Rules that match no tool are not errors: MCP servers connect and change
+regexes that fail to compile. A project layer's regexes are limited further, so a
+repository cannot stall the guard: no nested unbounded quantifiers (`(a+)+`), no
+alternation under an unbounded quantifier (`(a|aa)+`), at most 256 characters each, and at
+most 50 in the file. Rules that match no tool are not errors: MCP servers connect and change
 their tools during a session, and `/taintguard tools` shows which rules match what. An
 invalid managed or user layer, an unreadable policy file, or a failed read of managed
 settings puts TaintGuard in **lockdown**: every label is treated as present, the `strict`
@@ -298,6 +347,35 @@ The motivating rule plus an egress guard, as a user policy at `~/.claude/taint-g
 | `tool` selector | object | — | Exactly one of `exact` (name), `prefix`, `regex` (ECMAScript, anchored by the author), `anyOf` (names); optional `flags: "i"` with `prefix` or `regex` |
 | `arguments[]` | object | no | `pointer` (JSON Pointer into the tool's arguments, which are the call's fields other than `tool`, `tool_use_id`, `agentId` and `consent`) plus exactly one of `equals`, `matches`, `notMatches`, `exists`; optional `flags: "i"` with `matches` or `notMatches` |
 
+**Argument text over 100,000 characters** is never run through a regex. It fails closed
+instead: a `matches` or `notMatches` predicate counts as matching inside a source or a
+sink's `block`, and as not matching inside an `except`. Padding an argument therefore adds
+taint and keeps a sink active rather than slipping past either.
+
+### Built-in self-protection
+
+Under `trifecta`, `Write` and `Edit` are not sinks, so without more, injected text could
+have Claude rewrite TaintGuard's own policy or settings, and the change would load on the
+next restart or `/reload-plugins`. One rule is therefore built in and not part of any
+layer: `builtin:self-protect`. While any label is held, during lockdown, and while a
+rebuild is pending, it refuses:
+
+- `Write`, `Edit`, `MultiEdit` and `NotebookEdit` on the user policy file, the managed
+  policy file, the project's `.claude/taint-guard.json`, `.claude/settings.json` and
+  `.claude/settings.local.json`, the config directory's `settings.json` and
+  `settings.local.json`, and anything under its `taint-guard/` (the audit log) and
+  `plugins/` directories;
+- an MCP tool with a write verb (`write`, `edit`, `move`, `delete`, `put`, `save`, …) whose
+  arguments name one of those paths;
+- a `Bash` command whose text mentions `taint-guard`, `.claude/settings` or
+  `settings.local.json`.
+
+It applies in every `mode`, `audit` included, and no policy file can switch it off. The
+`Bash` check is best effort: it reads the command's text, so a command that builds the path
+at run time (`cd ~/.claude && sed -i … settings.json`, a variable, an encoding) is not
+recognised. Refusals name the rule and are audited as `deny` entries with
+`rule: "builtin:self-protect"`.
+
 ## What Claude and the user see
 
 **The band.** While any label is present, one line is drawn above the prompt (yellow; red
@@ -322,7 +400,10 @@ TaintGuard: this session now holds private, untrusted content (from mcp__gmail__
 **On each prompt** while tainted (or in lockdown), the same summary is added as a context
 line for Claude, ending with "Do not try to reach a refused result through another tool."
 
-**When a call is denied**, Claude's tool result is written as an instruction:
+**When a call is denied**, Claude's tool result is written as an instruction. A reason
+written in a project policy is prefixed with `(repository policy)`, so a repository cannot
+speak in TaintGuard's own voice, and where a trusted sink and a project sink take the same
+action, the trusted one supplies the words:
 
 ```text
 TaintGuard refused Bash. Bash is disabled because this session has read private mail or secrets.
@@ -336,11 +417,13 @@ turn.
 
 **Ask flow.** For an `ask` sink, the call is held and TaintGuard asks you, with the tool,
 a one-line summary of its arguments, the reason and the labels, offering **Allow once**
-and **Refuse**. Dismissing the question, typing an answer, or a session where TaintGuard
-cannot ask (`claude -p`) all refuse. **Allow once** passes the call on, so Claude Code's
-normal permission checks still apply after it, and is audited with the labels it
-overrode. TaintGuard asks itself rather than returning a native permission `ask`, so the
-question reaches a person in every permission mode, including auto mode and
+and **Refuse**. The summary puts destination fields (a channel, recipient or URL) first
+and, past 600 characters, shows both the start and the end, where a long shell command
+usually names where it sends data. Dismissing the question, typing an answer, or a session
+where TaintGuard cannot ask (`claude -p`) all refuse. **Allow once** passes the call on, so
+Claude Code's normal permission checks still apply after it, and is audited with the
+labels it overrode. TaintGuard asks itself rather than returning a native permission
+`ask`, so the question reaches a person in every permission mode, including auto mode and
 `bypassPermissions`. An ask waits until someone answers: use `deny` sinks for unattended
 sessions.
 
@@ -351,7 +434,7 @@ sessions.
 | `/taintguard` | Status: on, off, clean, tainted or lockdown; each label with the rule, tool, subagent and time that added it; active rules; refused calls; what is refused or needs approval now; the policy layers loaded and any warnings; background tasks started before taint. `/taintguard status` is the same. |
 | `/taintguard explain <tool> [json args]` | Dry run: would this call be allowed, asked or refused right now, by which rule, and which sources it would fire. Changes nothing. |
 | `/taintguard tools` | Every tool Claude has been shown this session, with the sources and sinks that match it. Flags tools on a private-data server that match no rule, and unknown-verb tools treated as source and sink. |
-| `/taintguard clear [label…]` | Declassify the named labels, or all of them. With `userDeclassify: confirm` it asks first; with `never` it refuses and names the policy layer. Always audited. Only you can run it, from the prompt (or Remote Control): Claude and SDK hosts cannot. |
+| `/taintguard clear [label…]` | Declassify the named labels, or all of them. With `userDeclassify: confirm` it asks first; the labels to clear are fixed before it asks, and a label that arrives while the question is open stays and is named in the reply. With `never` it refuses and names the policy layer. Always audited. Only you can run it, from the prompt (or Remote Control): Claude and SDK hosts cannot. |
 | `/taintguard reload` | Re-read and re-validate every policy layer; the taint set is unchanged |
 | `/taintguard audit` | The path of this session's audit log and its last 20 entries |
 
@@ -398,6 +481,7 @@ Code's tool pipeline, or side channels.
 3. **Fail closed.** The hook carries a `.catch` handler. Without one, Claude Code skips a hook that throws or times out and the call runs ([handle a hook that fails](https://code.claude.com/docs/en/plugins/mods/events#handle-a-hook-that-fails)). The handler re-checks sinks with a minimal path and denies on any match, or on any doubt; it must finish within its own 1-second limit.
 4. **Before, not after.** Sinks are judged before `next(e)`, so a refused tool never starts.
 5. **No weakening from the repository.** A project policy can only add rules; a broken one is dropped, never treated as "no policy".
+6. **No rewriting its own policy.** While tainted, `builtin:self-protect` refuses writes to TaintGuard's policy files, Claude Code's settings files and its plugin and audit directories, in every mode (see [Built-in self-protection](#built-in-self-protection)).
 
 ### Known limitations and residual risk
 
@@ -408,10 +492,14 @@ Code's tool pipeline, or side channels.
 | Argument matching is text matching | Regex allowlists on `Bash` commands are easy to evade (aliases, `sh -c`, encodings) | Prefer whole-tool sinks for shells; document that `except` on `Bash` is advisory |
 | Chain position | A mod earlier in the chain can answer or rewrite a call before TaintGuard sees it | Deploy via managed `prependPlugins`; managed `PreToolUse` hooks still run first and stay final |
 | Other mods' own API calls | Another mod's `$.http.fetch` or `$.process.run` is not a tool call | v2 hardening: as a prepended mod, intercept later mods' API calls (each is an event) while tainted |
-| History cap | `$.session.messages()` returns the newest 4,096 entries | `$.store` backup copy plus `assume-tainted` |
+| History cap | `$.session.messages()` returns the newest 4,096 entries, and a rebuild reads at most the newest 20 subagent transcripts | `$.store` backup copy plus `assume-tainted`, which also covers an unreadable or cut subagent transcript |
 | Hook time limit | 10 s of the hook's own time per event | Hot path is in-memory and precompiled; no I/O before the decision |
 | Approved escape | **Allow once** lets a sink through | Every approval is audited with the labels it overrode |
-| Mods are not sandboxed | TaintGuard runs with the user's permissions | Ship small, dependency-free, reviewed with `claude plugin validate`; it needs only `fs`, `store`, `session`, `ui`, `command` |
+| Mods are not sandboxed | TaintGuard runs with the user's permissions | Ship small, dependency-free, reviewed with `claude plugin validate --strict`, whose `calls:` line lists the nine API namespaces it uses: `clock` (timestamps and the one-second audit flush), `command` (registers `/taintguard`), `env` (reads `CLAUDE_CONFIG_DIR`, `HOME` and `USERPROFILE` to find the policy, settings and audit paths), `fs` (reads policy files, writes the audit log), `session` (the session id and working directory, and the history a rebuild reads), `settings` (reads managed settings for the lock, the preset floor and the managed policy path), `state` (the taint set and the status the band draws), `store` (the taint copy and the audit-hash key) and `ui` (the ask and clear questions, transcript lines and the band) |
+| Sources outside the preset families | No preset labels GitHub, Jira, Confluence, Linear, Zendesk or other issue trackers and ticket systems, or a mail file read with `Read`, though they carry injected text as well as mail does; their content passes through clean | Add them as sources in a user or managed policy; see [known gaps](evals/RESULTS.md#known-gaps-reported-not-gated) |
+| MCP write verbs outside the spec's list | An MCP tool that writes under another verb (`push_files`, `put_object`, `paste`, `tweet`, `put_file`) is not outbound, so no preset sink blocks it | Add a sink for those tools in a user or managed policy; see [known gaps](evals/RESULTS.md#known-gaps-reported-not-gated) |
+| Self-protection reads Bash text | `builtin:self-protect` refuses a `Bash` command only when its text names `taint-guard`, `.claude/settings` or `settings.local.json`; a command that builds the path at run time gets through it. Under `trifecta`, the preset still refuses `Bash` once `secret` is held and asks once `private` and `untrusted` are, but after `untrusted` content alone (a web page) such a command runs | Deploy as a managed mod with the managed policy in an administrator-only path, which the user's shell cannot write; under `strict`, `Bash` is refused once any label is held |
+| Benign tasks miss the spec's targets | Under `trifecta`, 18.3% of ordinary tasks hit an ask or a refusal and 2.5% could not finish (targets: under 5% and under 1%) | See [What the presets cost on ordinary work](#what-the-presets-cost-on-ordinary-work) |
 | Compaction while TaintGuard was off | A session compacted while TaintGuard was disabled or not installed carries no taint record, so resuming or branching it later can come back clean | /resume of the same session still has the $.store copy; organizations deploy TaintGuard as a managed mod so it is always loaded |
 
 One more applies to an ordinary (user-installed) TaintGuard wherever Claude Code's

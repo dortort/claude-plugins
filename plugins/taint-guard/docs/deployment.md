@@ -27,7 +27,9 @@ Deployed as described here, TaintGuard:
   and `/branch`, resets on `/clear`, writes the compaction taint record and notes
   background tasks.
 - **cannot be switched off or weakened by users.** The managed `enabled` lock, the preset
-  floor and the managed policy path are read from managed settings alone.
+  floor and the managed policy path are read from managed settings alone, and with either
+  the lock or a preset in place, a user policy can no longer lower `mode`,
+  `userDeclassify` or `onUnknownHistory`.
 
 ## Requirements
 
@@ -87,6 +89,16 @@ name. It sits above the user and project layers: a managed rule cannot be switch
 a user or a repository, and the managed layer may switch off any other rule. Its global
 settings join the strictest-value merge (`mode`, `userDeclassify`, `onUnknownHistory`),
 and its `resetOnClear` wins over the user's.
+
+**The managed floor on the globals.** Once managed settings set `enabled: true` or a
+`preset` (step 3), `mode`, `userDeclassify` and `onUnknownHistory` are taken from the
+managed policy, the preset and the defaults (`enforce`, `confirm`, `assume-tainted`) alone.
+A user policy can only make them stricter: a user `mode: "audit"` or `"ask"`,
+`userDeclassify: "allow"` or `onUnknownHistory: "ignore"` is ignored, and `/taintguard`
+lists a warning saying so. Without the lock or a preset, a user may lower them for their
+own sessions, down to what the managed policy sets. A repository's project policy can never
+lower them. So a managed policy needs to set a global only to go beyond the defaults, as
+`userDeclassify: "never"` does below.
 
 This example keeps the preset's rules, adds a CRM source, refuses shells and web tools
 after secrets or customer data, refuses Slack posts after private or customer data, and
@@ -195,6 +207,7 @@ What each key does:
   - `preset` is a floor: the stricter of the managed and the user's preset applies
     (`strict` > `trifecta` > `none`), and the user cannot switch off preset rules from
     their policy file.
+  - Either of the two puts the globals under the managed floor (step 2).
   - `managedPolicyPath` names the managed policy file. Only this managed value counts; the
     same key in user settings is ignored with a warning.
 
@@ -205,6 +218,26 @@ on and enters lockdown, as the built-in guard fails closed when it cannot read m
 settings ([set options on the built-in guard](https://code.claude.com/docs/en/plugins/mods/admin#set-options-on-the-built-in-guard)).
 The other options (`showBand`, `auditLog`, `auditArguments`, `userPolicyPath`) are
 preferences: managed values for them are defaults a user can change.
+
+### Self-protection
+
+Every session also carries one rule that is in no policy file: `builtin:self-protect`.
+While any label is held, during lockdown, and until a restart or resume rebuild has
+finished, it refuses `Write`, `Edit`, `MultiEdit` and `NotebookEdit` calls, and MCP tools
+with a write verb, that target the managed policy file, the user policy file, the
+project's `.claude/taint-guard.json`, `.claude/settings.json` and
+`.claude/settings.local.json`, the config directory's
+`settings.json` and `settings.local.json`, or anything under its `taint-guard/` (audit log)
+and `plugins/` directories, and `Bash` commands whose text mentions `taint-guard`,
+`.claude/settings` or `settings.local.json`. It applies in every `mode`, and no layer,
+managed included, can switch it off.
+
+It keeps injected text from rewriting the user's own files so that the next session loads
+a weaker policy. It is not what protects the organization's files: the managed settings
+file, the managed policy and the marketplace directory stay safe because only an
+administrator can write them, and the `Bash` check reads the command's text, so a command
+that builds a path at run time gets past it. Keep those paths administrator-only, as step 1
+and step 2 say.
 
 To also keep users' own mods from running at all, add the built-in guard's
 `allowManagedModsOnly` option and, if you want, `disableSideloadFlags`; TaintGuard is the
@@ -246,7 +279,8 @@ To check the settings reached the machine at all, see
 | Switch off a managed rule | No | No |
 | Switch off a preset rule | No, once managed settings set a `preset` | No |
 | Add labels, sources and sinks | Yes, in the user policy | Yes; a broken project file is dropped with a warning |
-| Lower `mode`, `userDeclassify` or `onUnknownHistory` | Only where no managed value is stricter | No |
+| Lower `mode`, `userDeclassify` or `onUnknownHistory` | No, once managed settings set `enabled: true` or a `preset`: the user layer can then only tighten them. Otherwise only where no managed value is stricter | No |
+| Have Claude write the policy or settings files in a tainted session | No: `builtin:self-protect` refuses it while any label is held; the user can still edit their own files outside Claude | No |
 | Set `resetOnClear` | Only when the managed policy does not | No (ignored with a warning) |
 | Clear labels with `/taintguard clear` | Only as `userDeclassify` allows (`never` refuses) | No: Claude and SDK hosts cannot run it |
 | Answer **Allow once** on an `ask` sink | Yes, audited; use `deny` sinks where that is not acceptable | — |
