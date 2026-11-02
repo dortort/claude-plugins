@@ -15,6 +15,7 @@ import { parseClearArgs, parseExplainArgs, toolsReport } from '../src/inventory.
 import { effectivePreset, expandHome, ignoredManagedPathWarning, managedOptionsFrom } from '../src/managed.ts'
 import { activeSummary, allLabels, evaluateSinks, failSafeDecision, isSinkActive, loadPolicy, matchSources } from '../src/policy.ts'
 import { PRESETS, classifyTool, describePattern } from '../src/presets.ts'
+import { protectedPaths, selfProtect, type ProtectEnv, type ProtectedPath } from '../src/protect.ts'
 import {
   EMPTY_TAINT,
   addFiring,
@@ -106,6 +107,7 @@ type Ctx = {
   refusals: Map<string, number>
   knownTools: Set<string>
   pending: PendingRebuild | null
+  protect: { paths: ProtectedPath[]; env: ProtectEnv } | null
 }
 
 const PLUGIN = 'taint-guard'
@@ -164,6 +166,11 @@ function heldLabels(ctx: Ctx, policy: CompiledPolicy, taint: TaintSnapshot): str
   return holdReason(ctx) !== null ? allLabels(policy) : [...taint.labels]
 }
 
+function protectedHit(ctx: Ctx, call: ToolCall, held: readonly string[]): ReturnType<typeof selfProtect> {
+  if (ctx.protect === null || (held.length === 0 && holdReason(ctx) === null)) return null
+  return selfProtect(call, ctx.protect.paths, ctx.protect.env)
+}
+
 function toCall(e: Readonly<Record<string, unknown>> & { tool: string; tool_use_id: string; agentId?: string }): ToolCall {
   const call: ToolCall = { tool: e.tool, args: callArguments(e), toolUseId: e.tool_use_id }
   if (e.agentId !== undefined) call.agentId = e.agentId
@@ -213,6 +220,11 @@ async function loadAll($: Dollar, ctx: Ctx, cwd: string): Promise<LoadedPolicy> 
   ctx.preset = effective.preset
   const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
   const managedPath = managed.managedPolicyPath === undefined ? null : expandHome(managed.managedPolicyPath, home)
+  const configDir = configDirFrom({ CLAUDE_CONFIG_DIR: await $.env.get('CLAUDE_CONFIG_DIR'), HOME: home })
+  ctx.protect = {
+    paths: protectedPaths({ userPolicyPath: ctx.options.userPolicyPath, managedPolicyPath: managedPath, cwd, configDir, home }),
+    env: { cwd, home },
+  }
   const [managedLayer, userLayer, projectLayer] = await Promise.all([
     managedPath === null ? Promise.resolve(null) : readLayer($, 'managed', managedPath),
     readLayer($, 'user', expandHome(ctx.options.userPolicyPath, home)),
@@ -688,6 +700,12 @@ async function guardCall(
   const call = toCall(e)
   const before = await read($, taintAtom)
   const held = heldLabels(ctx, policy, before)
+  const guarded = protectedHit(ctx, call, held)
+  if (guarded !== null) {
+    const words = { tool: call.tool, reason: guarded.reason, labels: held, fromTools: sourceTools(before), rule: guarded.rule, lockdown }
+    await callEntry(ctx, 'deny', call, at, { rule: guarded.rule, labels: held })
+    return refuse($, ctx, call.tool, guarded.rule, denyText(words))
+  }
   const decision = evaluateSinks(policy, call, new Set(held))
   const primary = decision.primary
   if (primary !== undefined) {
@@ -743,9 +761,10 @@ async function guardFailed(
   try {
     labels = heldLabels(ctx, policy, await read($, taintAtom))
   } catch {}
+  const guarded = protectedHit(ctx, call, labels)
   const decision = failSafeDecision(policy, call, new Set(labels))
-  if (decision.action !== 'allow') {
-    const rule = decision.primary?.sink.id ?? 'fail-safe'
+  if (guarded !== null || decision.action !== 'allow') {
+    const rule = guarded?.rule ?? decision.primary?.sink.id ?? 'fail-safe'
     const detail = failure.message === undefined ? failure.kind : `${failure.kind}: ${failure.message}`
     await callEntry(ctx, 'guard-failure', call, at, { rule, labels, detail })
     noteRefusal($, ctx, call.tool, rule)
@@ -863,6 +882,7 @@ export const register: Register = (on, rawOptions) => {
     refusals: new Map(),
     knownTools: new Set(),
     pending: { origin: 'restart' },
+    protect: null,
   }
 
   on('session.start', async ($, e, next) => {
