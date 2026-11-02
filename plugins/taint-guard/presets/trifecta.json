@@ -1,0 +1,185 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dortort/claude-plugins/main/plugins/taint-guard/schema/taint-guard.schema.json",
+  "version": 1,
+  "description": "Ask before outbound calls once private and untrusted content meet; refuse them once secrets are read",
+  "labels": {
+    "private": {
+      "description": "Data the user owns: mail, documents, chats"
+    },
+    "untrusted": {
+      "description": "Text written by third parties"
+    },
+    "secret": {
+      "description": "Credentials and keys"
+    }
+  },
+  "sources": [
+    {
+      "id": "private-read",
+      "description": "A read verb on a mail, documents or chat MCP server",
+      "match": {
+        "tool": {
+          "regex": "^mcp__(?=(?:[^_]|_(?!_))*__(?:[\\s\\S]*[_-])?(?:get|read|search|list|fetch|download|history))(?:[^_]|_(?!_))*?(?:gmail|google_mail|google-mail|googlemail|outlook|mail|drive|gdrive|google_drive|google-drive|docs|google_docs|notion|onedrive|sharepoint|slack|teams|chat)",
+          "flags": "i"
+        }
+      },
+      "on": "attempt",
+      "taints": [
+        "private",
+        "untrusted"
+      ]
+    },
+    {
+      "id": "private-other",
+      "description": "A tool with neither a read nor a write verb on a mail, documents or chat MCP server",
+      "match": {
+        "tool": {
+          "regex": "^mcp__(?=(?:[^_]|_(?!_))*__(?!(?:[\\s\\S]*[_-])?(?:(?:get|read|search|list|fetch|download|history)|(?:send|post|reply|forward|create|update|upload|share|schedule|comment|invite))))(?:[^_]|_(?!_))*?(?:gmail|google_mail|google-mail|googlemail|outlook|mail|drive|gdrive|google_drive|google-drive|docs|google_docs|notion|onedrive|sharepoint|slack|teams|chat)",
+          "flags": "i"
+        }
+      },
+      "on": "attempt",
+      "taints": [
+        "private",
+        "untrusted"
+      ]
+    },
+    {
+      "id": "web-content",
+      "description": "Web pages and search results",
+      "match": {
+        "tool": {
+          "anyOf": [
+            "WebFetch",
+            "WebSearch"
+          ]
+        }
+      },
+      "on": "success",
+      "taints": [
+        "untrusted"
+      ]
+    },
+    {
+      "id": "secret-files",
+      "description": "Reading a secret file",
+      "match": {
+        "tool": {
+          "exact": "Read"
+        },
+        "arguments": [
+          {
+            "pointer": "/file_path",
+            "matches": "(^|[\\\\/])(?:\\.env(?!\\.(?:example|sample|template|dist)$)[^\\\\/]*|id_(?:rsa|dsa|ecdsa|ed25519)|credentials|\\.netrc|\\.pgpass|\\.npmrc|[^\\\\/]*\\.pem|[^\\\\/]*\\.key)$",
+            "flags": "i"
+          }
+        ]
+      },
+      "on": "attempt",
+      "taints": [
+        "secret"
+      ]
+    },
+    {
+      "id": "secret-grep",
+      "description": "Searching a secret file",
+      "match": {
+        "tool": {
+          "exact": "Grep"
+        },
+        "arguments": [
+          {
+            "pointer": "/path",
+            "matches": "(^|[\\\\/])(?:\\.env(?!\\.(?:example|sample|template|dist)$)[^\\\\/]*|id_(?:rsa|dsa|ecdsa|ed25519)|credentials|\\.netrc|\\.pgpass|\\.npmrc|[^\\\\/]*\\.pem|[^\\\\/]*\\.key)$",
+            "flags": "i"
+          }
+        ]
+      },
+      "on": "attempt",
+      "taints": [
+        "secret"
+      ]
+    }
+  ],
+  "sinks": [
+    {
+      "id": "outbound-secret",
+      "description": "Outbound tools after reading secrets",
+      "when": {
+        "anyOf": [
+          "secret"
+        ]
+      },
+      "block": [
+        {
+          "tool": {
+            "exact": "Bash"
+          }
+        },
+        {
+          "tool": {
+            "exact": "WebFetch"
+          }
+        },
+        {
+          "tool": {
+            "regex": "^mcp__(?:[^_]|_(?!_))*__(?:[\\s\\S]*[_-])?(?:send|post|reply|forward|create|update|upload|share|schedule|comment|invite)",
+            "flags": "i"
+          }
+        },
+        {
+          "tool": {
+            "regex": "^mcp__(?=(?:[^_]|_(?!_))*__(?!(?:[\\s\\S]*[_-])?(?:(?:get|read|search|list|fetch|download|history)|(?:send|post|reply|forward|create|update|upload|share|schedule|comment|invite))))(?:[^_]|_(?!_))*?(?:gmail|google_mail|google-mail|googlemail|outlook|mail|drive|gdrive|google_drive|google-drive|docs|google_docs|notion|onedrive|sharepoint|slack|teams|chat)",
+            "flags": "i"
+          }
+        }
+      ],
+      "action": "deny",
+      "reason": "This tool can send data out of the session, and the session has read secrets."
+    },
+    {
+      "id": "outbound-private",
+      "description": "Outbound tools once private and untrusted content are both present",
+      "when": {
+        "allOf": [
+          "private",
+          "untrusted"
+        ]
+      },
+      "block": [
+        {
+          "tool": {
+            "exact": "Bash"
+          }
+        },
+        {
+          "tool": {
+            "exact": "WebFetch"
+          }
+        },
+        {
+          "tool": {
+            "regex": "^mcp__(?:[^_]|_(?!_))*__(?:[\\s\\S]*[_-])?(?:send|post|reply|forward|create|update|upload|share|schedule|comment|invite)",
+            "flags": "i"
+          }
+        },
+        {
+          "tool": {
+            "regex": "^mcp__(?=(?:[^_]|_(?!_))*__(?!(?:[\\s\\S]*[_-])?(?:(?:get|read|search|list|fetch|download|history)|(?:send|post|reply|forward|create|update|upload|share|schedule|comment|invite))))(?:[^_]|_(?!_))*?(?:gmail|google_mail|google-mail|googlemail|outlook|mail|drive|gdrive|google_drive|google-drive|docs|google_docs|notion|onedrive|sharepoint|slack|teams|chat)",
+            "flags": "i"
+          }
+        }
+      ],
+      "except": [
+        {
+          "tool": {
+            "regex": "^mcp__(?=(?:[^_]|_(?!_))*__(?:[\\s\\S]*[_-])?create_draft$)(?:[^_]|_(?!_))*?(?:gmail|google_mail|google-mail|googlemail|outlook|mail)",
+            "flags": "i"
+          }
+        }
+      ],
+      "action": "ask",
+      "reason": "This would send data out of a session that holds private, third-party content."
+    }
+  ]
+}

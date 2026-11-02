@@ -1,0 +1,181 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dortort/claude-plugins/main/plugins/taint-guard/schema/taint-guard.schema.json",
+  "version": 1,
+  "mode": "audit",
+  "subagents": "shared",
+  "resetOnClear": false,
+  "userDeclassify": "never",
+  "onUnknownHistory": "ignore",
+  "labels": {
+    "A": {},
+    "b-2": {
+      "description": "x"
+    },
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": {}
+  },
+  "sources": [
+    {
+      "id": "exact",
+      "match": {
+        "tool": {
+          "exact": "Read"
+        }
+      },
+      "taints": [
+        "A"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "prefix",
+      "match": {
+        "tool": {
+          "prefix": "mcp__notion"
+        }
+      },
+      "on": "success",
+      "taints": [
+        "A",
+        "b-2"
+      ]
+    },
+    {
+      "id": "prefix.i",
+      "match": {
+        "tool": {
+          "prefix": "MCP__",
+          "flags": "i"
+        }
+      },
+      "taints": [
+        "b-2"
+      ]
+    },
+    {
+      "id": "regex",
+      "match": {
+        "tool": {
+          "regex": "^Web"
+        }
+      },
+      "taints": [
+        "A"
+      ]
+    },
+    {
+      "id": "regex_i",
+      "match": {
+        "tool": {
+          "regex": "^web",
+          "flags": "i"
+        }
+      },
+      "taints": [
+        "A"
+      ],
+      "description": "case-insensitive"
+    },
+    {
+      "id": "any-of",
+      "match": {
+        "tool": {
+          "anyOf": [
+            "Glob",
+            "Grep"
+          ]
+        }
+      },
+      "taints": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ]
+    },
+    {
+      "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "match": {
+        "tool": {
+          "exact": "Bash"
+        },
+        "arguments": []
+      },
+      "taints": [
+        "A"
+      ],
+      "enabled": false
+    }
+  ],
+  "sinks": [
+    {
+      "id": "always",
+      "when": {},
+      "block": [
+        {
+          "tool": {
+            "exact": "Bash"
+          },
+          "arguments": [
+            {
+              "pointer": "/command",
+              "matches": "curl",
+              "flags": "i"
+            },
+            {
+              "pointer": "/command",
+              "notMatches": "^echo "
+            },
+            {
+              "pointer": "/run_in_background",
+              "equals": true
+            },
+            {
+              "pointer": "/sandbox",
+              "equals": {
+                "network": false,
+                "paths": [
+                  "/tmp",
+                  1,
+                  null
+                ]
+              }
+            },
+            {
+              "pointer": "/timeout",
+              "exists": false
+            },
+            {
+              "pointer": "",
+              "exists": true
+            },
+            {
+              "pointer": "/a~1b/~0c",
+              "notMatches": "x",
+              "flags": "i"
+            }
+          ]
+        }
+      ],
+      "action": "audit",
+      "reason": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+    },
+    {
+      "id": "both",
+      "when": {
+        "anyOf": [
+          "A"
+        ],
+        "allOf": [
+          "A",
+          "b-2"
+        ]
+      },
+      "block": [
+        {
+          "tool": {
+            "exact": "Write"
+          }
+        }
+      ],
+      "except": [],
+      "action": "ask"
+    }
+  ]
+}
