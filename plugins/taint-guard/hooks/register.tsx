@@ -18,6 +18,7 @@ import { PRESETS, classifyTool, describePattern } from '../src/presets.ts'
 import {
   EMPTY_TAINT,
   addFiring,
+  afterCut,
   compactInstructions,
   countBlocked,
   formatRecord,
@@ -313,21 +314,29 @@ async function pruneStore($: Dollar, ctx: Ctx, at: number): Promise<void> {
   } catch {}
 }
 
-async function agentTranscripts($: Dollar, messages: readonly SessionMessage[]): Promise<SessionMessage[][]> {
+async function agentTranscripts($: Dollar, messages: readonly SessionMessage[]): Promise<{ transcripts: SessionMessage[][]; unknown: boolean }> {
   const ids: string[] = []
   for (const message of messages) {
     for (const use of message.toolUses) {
       if (use.agentId !== undefined && !ids.includes(use.agentId)) ids.push(use.agentId)
     }
   }
-  const out: SessionMessage[][] = []
+  let unknown = ids.length > AGENT_TRANSCRIPTS_MAX
+  const transcripts: SessionMessage[][] = []
   for (const agentId of ids.slice(-AGENT_TRANSCRIPTS_MAX)) {
     try {
       const found = await $.session.messages({ agentId })
-      if (Array.isArray(found)) out.push(found)
-    } catch {}
+      if (!Array.isArray(found)) {
+        unknown = true
+        continue
+      }
+      if (found.length >= HISTORY_LIMIT) unknown = true
+      transcripts.push(found)
+    } catch {
+      unknown = true
+    }
   }
-  return out
+  return { transcripts, unknown }
 }
 
 async function rebuildTaint($: Dollar, policy: CompiledPolicy, copy: StoredTaint | null, at: number): Promise<RebuildResult> {
@@ -338,14 +347,16 @@ async function rebuildTaint($: Dollar, policy: CompiledPolicy, copy: StoredTaint
   } catch {
     historyLimit = 0
   }
+  const agents = await agentTranscripts($, afterCut(messages, copy?.clearedThrough))
   return rebuild({
     messages,
-    agentMessages: await agentTranscripts($, messages),
+    agentMessages: agents.transcripts,
     match: (call, timing) => matchSources(policy, call, timing),
     declaredLabels: allLabels(policy),
     onUnknownHistory: policy.onUnknownHistory,
     storeCopy: copy,
     historyLimit,
+    unknownHistory: agents.unknown,
     at,
   })
 }

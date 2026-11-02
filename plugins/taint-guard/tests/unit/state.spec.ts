@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   EMPTY_TAINT,
   OWN_DENIAL_PREFIX,
+  afterCut,
   RECORD_PREFIX,
   addFiring,
   compactInstructions,
@@ -530,5 +531,39 @@ describe('declassification cut point', () => {
     const storeCopy = toStored(EMPTY_TAINT, 5, 'toolu_compacted_away')
     const result = rebuild(input({ messages: [assistant([mail, read])], storeCopy }))
     assert.deepEqual(result.snapshot.labels, ['private', 'secret', 'untrusted'])
+  })
+})
+
+describe('unknown history', () => {
+  const clean = [assistant([use(FETCH, { url: 'https://x' }, { text: '<html>' })])]
+
+  it('counts like a cut history: assume-tainted adds every declared label', () => {
+    const result = rebuild(input({ messages: clean, unknownHistory: true }))
+    assert.equal(result.truncated, true)
+    assert.deepEqual(result.snapshot.labels, DECLARED)
+    assert.equal(result.snapshot.firedBy.at(-1)?.rule, 'history-cut')
+  })
+
+  it('adds nothing under ignore, and nothing when the history is known', () => {
+    assert.deepEqual(rebuild(input({ messages: clean, unknownHistory: true, onUnknownHistory: 'ignore' })).snapshot.labels, ['untrusted'])
+    const known = rebuild(input({ messages: clean, unknownHistory: false }))
+    assert.equal(known.truncated, false)
+    assert.deepEqual(known.snapshot.labels, ['untrusted'])
+  })
+})
+
+describe('afterCut', () => {
+  const first = assistant([use(MAIL, {}, { tool_use_id: 'toolu_a' })])
+  const second = user('ok')
+  const third = assistant([use('Agent', {}, { tool_use_id: 'toolu_b', agentId: 'ag' })])
+
+  it('keeps only the messages after the cut point', () => {
+    assert.deepEqual(afterCut([first, second, third], 'toolu_a'), [second, third])
+    assert.deepEqual(afterCut([first, second, third], 'toolu_b'), [])
+  })
+
+  it('keeps everything with no cut or one no longer in the history', () => {
+    assert.deepEqual(afterCut([first, second, third], undefined), [first, second, third])
+    assert.deepEqual(afterCut([first, second, third], 'toolu_gone'), [first, second, third])
   })
 })

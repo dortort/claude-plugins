@@ -23,3 +23,54 @@ describe('rebuild after a resume', () => {
     expect(kit.store.get(`taint:${SESSION_ID}`)).toMatchObject({ labels: ['secret', 'untrusted'] })
   })
 })
+
+describe('rebuild from subagents', () => {
+  const agentUse = (agentId: string, id?: string): SessionMessage =>
+    use('Agent', { prompt: `task for ${agentId}` }, id === undefined ? { agentId } : { agentId, id })
+
+  test('an unreadable subagent transcript counts as unknown history', NONE, async ($, on) => {
+    const kit = engine(on, { files: EXAMPLE, messages: [agentUse('agent-gone')] })
+    await start($, kit)
+    expect(await labels($)).toEqual(ALL)
+  })
+
+  test('more subagents than are read counts as unknown history', NONE, async ($, on) => {
+    const ids = Array.from({ length: 21 }, (_, i) => `agent-${i}`)
+    const kit = engine(on, {
+      files: EXAMPLE,
+      messages: ids.map((id) => agentUse(id)),
+      agents: Object.fromEntries(ids.map((id) => [id, [said('assistant', 'done')]])),
+    })
+    await start($, kit)
+    expect(await labels($)).toEqual(ALL)
+  })
+
+  test('twenty readable subagents are not unknown history', NONE, async ($, on) => {
+    const ids = Array.from({ length: 20 }, (_, i) => `agent-${i}`)
+    const kit = engine(on, {
+      files: EXAMPLE,
+      messages: ids.map((id) => agentUse(id)),
+      agents: Object.fromEntries(ids.map((id) => [id, [said('assistant', 'done')]])),
+    })
+    await start($, kit)
+    expect(await labels($)).toEqual([])
+  })
+
+  test('a subagent transcript at the history limit counts as unknown history', NONE, async ($, on) => {
+    const long = Array.from({ length: 4096 }, () => said('assistant', 'thinking'))
+    const kit = engine(on, { files: EXAMPLE, messages: [agentUse('agent-long')], agents: { 'agent-long': long } })
+    await start($, kit)
+    expect(await labels($)).toEqual(ALL)
+  })
+
+  test('a declassification cut also skips subagents started before it', NONE, async ($, on) => {
+    const kit = engine(on, {
+      files: EXAMPLE,
+      messages: [agentUse('agent-old', 'toolu_cut'), said('user', 'thanks'), agentUse('agent-new')],
+      agents: { 'agent-old': [use(GMAIL_READ, { id: 'm1' })], 'agent-new': [use('Read', { file_path: '/work/.env' })] },
+      store: { [`taint:${SESSION_ID}`]: { labels: [], firedBy: [], savedAt: T0, clearedThrough: 'toolu_cut' } },
+    })
+    await start($, kit)
+    expect(await labels($)).toEqual(['secret'])
+  })
+})
