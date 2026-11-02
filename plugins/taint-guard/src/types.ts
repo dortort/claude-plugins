@@ -104,6 +104,8 @@ export type LoadInput = {
   preset: PresetName
   /** True when managed policy set a preset floor: the preset layer then counts as managed for disabling. */
   presetFromManaged: boolean
+  /** True when managed settings lock TaintGuard on or set a preset (implied by presetFromManaged): the user layer then cannot lower globals below the managed and preset values. */
+  managedFloor?: boolean
   managed: LayerText | null
   user: LayerText | null
   project: LayerText | null

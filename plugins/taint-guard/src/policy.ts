@@ -723,21 +723,31 @@ export function loadPolicy(input: LoadInput, presets: Readonly<Record<PresetName
   }
 
   const byLayer = (name: LayerName): PolicyFile | undefined => ordered.find((l) => l.layer === name)?.policy
-  const trustedPolicies = ordered.filter((l) => l.layer !== 'project').map((l) => l.policy)
-  const projectPolicy = byLayer('project')
-  const tightened = <T extends string>(key: string, order: readonly T[], fallback: T, pick: (p: PolicyFile) => T | undefined): T | undefined => {
-    const base = strictest(order, trustedPolicies.map(pick))
-    const own = projectPolicy === undefined ? undefined : pick(projectPolicy)
-    if (own === undefined) return base
-    if (order.indexOf(own) < order.indexOf(base ?? fallback)) warnings.push(`project policy cannot lower ${key}; the value is ignored`)
-    return strictest(order, [base ?? fallback, own])
+  const managedFloor = input.managedFloor === true || input.presetFromManaged
+  const floorLayers: readonly LayerName[] = managedFloor ? ['managed', 'preset'] : ['managed', 'user', 'preset']
+  const floorPolicies = ordered.filter((l) => floorLayers.includes(l.layer)).map((l) => l.policy)
+  const raised = <T extends string>(order: readonly T[], floor: T, layer: LayerName, pick: (p: PolicyFile) => T | undefined, warning: string): T => {
+    const policy = byLayer(layer)
+    const own = policy === undefined ? undefined : pick(policy)
+    if (own === undefined) return floor
+    if (order.indexOf(own) < order.indexOf(floor)) {
+      warnings.push(warning)
+      return floor
+    }
+    return own
   }
-  const declaredMode = tightened('mode', MODE_ORDER, 'enforce', (p) => p.mode) ?? 'enforce'
+  const tightened = <T extends string>(key: string, order: readonly T[], fallback: T, pick: (p: PolicyFile) => T | undefined): T => {
+    const base = strictest(order, floorPolicies.map(pick)) ?? fallback
+    const floor = managedFloor
+      ? raised(order, base, 'user', pick, `user policy cannot lower ${key} below the managed floor; the value is ignored`)
+      : base
+    return raised(order, floor, 'project', pick, `project policy cannot lower ${key}; the value is ignored`)
+  }
+  const declaredMode = tightened('mode', MODE_ORDER, 'enforce', (p) => p.mode)
   const mode: Mode = lockdown === null ? declaredMode : 'enforce'
   const userDeclassify = tightened('userDeclassify', DECLASSIFY_ORDER, 'confirm', (p) => p.userDeclassify)
-  const declassifier = ordered.find((l) => userDeclassify !== undefined && l.policy.userDeclassify === userDeclassify)
-  const onUnknownHistory =
-    tightened('onUnknownHistory', UNKNOWN_HISTORY_ORDER, 'assume-tainted', (p) => p.onUnknownHistory) ?? 'assume-tainted'
+  const declassifier = ordered.find((l) => l.policy.userDeclassify === userDeclassify)
+  const onUnknownHistory = tightened('onUnknownHistory', UNKNOWN_HISTORY_ORDER, 'assume-tainted', (p) => p.onUnknownHistory)
   const projectReset = byLayer('project')?.resetOnClear
   if (projectReset !== undefined) warnings.push('project policy cannot set resetOnClear; the value is ignored')
   const resetOnClear = byLayer('managed')?.resetOnClear ?? byLayer('user')?.resetOnClear ?? true
@@ -786,7 +796,7 @@ export function loadPolicy(input: LoadInput, presets: Readonly<Record<PresetName
       mode,
       resetOnClear,
       subagents: 'shared',
-      userDeclassify: userDeclassify ?? 'confirm',
+      userDeclassify,
       userDeclassifyFrom: declassifier?.layer ?? 'default',
       onUnknownHistory,
       labels,
