@@ -11,6 +11,7 @@ import {
   auditReport,
   bandText,
   clearDeclinedText,
+  clearPendingText,
   clearRefusedText,
   clearedText,
   denyText,
@@ -516,6 +517,10 @@ describe('declassification texts', () => {
       'TaintGuard cleared private. Still present: secret. Kept secret, which arrived while you were confirming.',
     )
     assert.equal(clearedText(['private'], [], []), 'TaintGuard cleared private. The session is clean.')
+  })
+
+  it('says a clear waits for the rebuild', () => {
+    assert.match(clearPendingText(), /not yet rebuilt the taint set.*labels unchanged/)
   })
 })
 
