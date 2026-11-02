@@ -120,6 +120,11 @@ export function askSummary(tool: string, args: Readonly<Record<string, unknown>>
   return `${flat.slice(0, ASK_HEAD).trimEnd()} … ${flat.slice(-ASK_TAIL).trimStart()}`
 }
 
+/** A sink's reason as Claude and the user see it: a repository's own words are marked as such. */
+export function sinkReason(reason: string, trusted: boolean): string {
+  return trusted || reason === '' ? reason : `(repository policy) ${reason}`
+}
+
 function joinSentences(...parts: string[]): string {
   return parts.filter((part) => part.trim() !== '').join(' ')
 }
