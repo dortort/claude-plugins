@@ -2,8 +2,12 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
+import { benignEval } from '../../evals/benign.ts'
+import { injectionEval } from '../../evals/injection.ts'
+import { percent } from '../../evals/lib/replay.ts'
 import { loadPolicy, validatePolicy } from '../../src/policy.ts'
-import { PRESETS, SCHEMA_ID } from '../../src/presets.ts'
+import { FAMILY_TOKENS, PRESETS, SCHEMA_ID } from '../../src/presets.ts'
+import { SELF_PROTECT_RULE } from '../../src/protect.ts'
 
 const ROOT = join(import.meta.dirname, '..', '..')
 const REPO = join(ROOT, '..', '..')
@@ -20,6 +24,8 @@ const pkg = readJson<{ version: string; scripts: Record<string, string> }>(ROOT,
 const lock = readJson<Lock>(ROOT, 'package-lock.json')
 const readme = read(ROOT, 'README.md')
 const deployment = read(ROOT, 'docs', 'deployment.md')
+const results = read(ROOT, 'evals', 'RESULTS.md')
+const releaseNotes = read(ROOT, 'releases', `${manifest.version}.md`)
 const workflowPath = join(REPO, '.github', 'workflows', 'taint-guard.yml')
 
 function section(text: string, heading: string): string {
@@ -134,6 +140,103 @@ describe('README example policy', () => {
 
   it('loads as a user layer without lockdown or warnings', () => {
     loadsCleanly(blocks[0] ?? '', 'user')
+  })
+})
+
+function apiNamespaces(): string[] {
+  const sources = ['register.tsx', 'support.ts'].map((file) => read(ROOT, 'hooks', file))
+  const names = sources.flatMap((source) => [...source.matchAll(/\$\.([a-z]+)\./g)].map((match) => match[1] ?? ''))
+  return [...new Set(names)].sort()
+}
+
+describe('README security model', () => {
+  const limitations = section(readme, '### Known limitations and residual risk')
+  const rows = tableRows(limitations).slice(1)
+  const row = (name: string): string => (rows.find((cells) => cells[0] === name) ?? []).join(' | ')
+
+  it('names the built-in self-protection rule', () => {
+    assert.equal(SELF_PROTECT_RULE, 'builtin:self-protect')
+    assert.ok(readme.includes(`\`${SELF_PROTECT_RULE}\``))
+    assert.ok(section(readme, '### Built-in self-protection').includes(`\`${SELF_PROTECT_RULE}\``))
+    assert.ok(deployment.includes(`\`${SELF_PROTECT_RULE}\``))
+  })
+
+  it('lists exactly the API namespaces the hooks module calls', () => {
+    const used = apiNamespaces()
+    assert.deepEqual(used, ['clock', 'command', 'env', 'fs', 'session', 'settings', 'state', 'store', 'ui'])
+    const cell = row('Mods are not sandboxed')
+    const listed = [...cell.matchAll(/`([a-z]+)` \(/g)].map((match) => match[1] ?? '').sort()
+    assert.deepEqual(listed, used)
+  })
+
+  it('lists the gaps the evals report', () => {
+    for (const name of ['Sources outside the preset families', 'MCP write verbs outside the spec\'s list', 'Self-protection reads Bash text']) {
+      assert.notEqual(row(name), '', name)
+    }
+    assert.match(row('MCP write verbs outside the spec\'s list'), /`push_files`.*`put_object`/)
+    assert.ok(limitations.includes('(evals/RESULTS.md#known-gaps-reported-not-gated)'))
+    assert.ok(results.includes('\n### Known gaps (reported, not gated)\n'))
+  })
+
+  it('documents every preset source and server family', () => {
+    for (const source of PRESETS.trifecta?.sources ?? []) assert.ok(readme.includes(`\`preset:${source.id}\``), source.id)
+    const families = tableRows(section(readme, '## Presets')).filter((cells) => cells.length === 2)
+    for (const [family, tokens] of Object.entries(FAMILY_TOKENS)) {
+      const label = family === 'docs' ? 'documents' : family
+      const cell = families.find((cells) => cells[0] === label)?.[1] ?? ''
+      assert.deepEqual(
+        [...cell.matchAll(/`([^`]+)`/g)].map((match) => match[1]),
+        [...tokens],
+        family,
+      )
+    }
+  })
+
+  it('documents the fail-closed argument cap, the project regex limits and the managed floor', () => {
+    const flat = readme.replace(/\s+/g, ' ')
+    for (const phrase of ['100,000 characters', 'at most 256 characters', 'at most 50 in the file', 'alternation under an unbounded quantifier', 'The managed floor']) {
+      assert.ok(flat.includes(phrase), phrase)
+    }
+    assert.ok(deployment.includes('The managed floor on the globals'))
+  })
+})
+
+describe('evaluation results', () => {
+  const injection = injectionEval()
+  const benign = benignEval()
+  const rate = (part: number, whole: number): string => percent(part, whole)
+
+  it('RESULTS.md carries the current injection totals', () => {
+    const { strict, trifecta } = injection
+    assert.ok(results.includes(`| strict | ${strict.attempts} | 0 | ${strict.denied} | ${strict.askRefused} | 0 executed | met |`))
+    assert.ok(results.includes(`| trifecta | ${trifecta.attempts} | 0 | ${trifecta.denied} | ${trifecta.askRefused} | 0 executed without approval | met |`))
+    assert.ok(results.includes(`${strict.attempts} exfiltration calls`))
+  })
+
+  it('RESULTS.md carries the current gap counts', () => {
+    const table = section(results, '### Known gaps (reported, not gated)')
+    const counts = tableRows(table)
+      .slice(1)
+      .map((cells) => cells.slice(-4).join(' | '))
+    const expected = [...injection.gaps.values()].map((t) => [t.strict.scenarios, t.none.executed, t.trifecta.executed, t.strict.executed].join(' | '))
+    assert.deepEqual(counts, expected)
+  })
+
+  it('the README, the release notes and RESULTS.md state the measured benign rates', () => {
+    const { trifecta, strict } = benign.byPreset
+    const asked = rate(trifecta.hit, trifecta.traces)
+    const failed = rate(trifecta.failed, trifecta.traces)
+    const strictFailed = rate(strict.failed, strict.traces)
+    assert.equal(benign.pass, false)
+    const cost = section(readme, '### What the presets cost on ordinary work')
+    assert.ok(cost.includes(`| \`trifecta\` | ${asked} | ${failed} |`), cost)
+    assert.ok(cost.includes(`| \`strict\` | ${rate(strict.hit, strict.traces)} | ${strictFailed} |`), cost)
+    const notes = releaseNotes.replace(/\s+/g, ' ')
+    assert.ok(notes.includes(`${asked} of tasks hit an ask`))
+    assert.ok(notes.includes(`${failed} could not finish`))
+    assert.ok(notes.includes(`${strictFailed} could not finish`))
+    assert.ok(results.includes(`| hit an ask or refusal < 5% | ${asked} | **missed** |`))
+    assert.ok(results.includes(`| could not finish < 1% | ${failed} | **missed** |`))
   })
 })
 
