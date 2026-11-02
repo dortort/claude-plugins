@@ -1,6 +1,6 @@
 import { after, before, describe, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   contextAttachments,
@@ -19,6 +19,8 @@ import {
 const HMAC = /^[0-9a-f]{64}$/
 const FAKE_SECRET = `sk-e2e-fake-${Math.random().toString(36).slice(2, 10)}`
 const ATTEMPTS = 3
+const TRIFECTA = JSON.parse(readFileSync(join(import.meta.dirname, '../../presets/trifecta.json'), 'utf8')) as { sources: unknown[]; sinks: unknown[] }
+const TRIFECTA_RULES = TRIFECTA.sources.length + TRIFECTA.sinks.length
 
 const INBOX_POLICY = {
   version: 1,
@@ -230,7 +232,7 @@ describe('TaintGuard in real headless sessions', { skip: reason ?? false, timeou
     assert.equal(status.numTurns, 0)
     assert.match(status.result, /TaintGuard: clean/)
     assert.match(status.result, /Policy layers \(preset: trifecta\)/)
-    assert.match(status.result, /preset: loaded, 7 rules, presets\/trifecta\.json/)
+    assert.ok(status.result.includes(`preset: loaded, ${TRIFECTA_RULES} rules, presets/trifecta.json`), status.result)
     assert.ok(status.result.includes(`user: absent, 0 rules, ${userPolicyPath}`), status.result)
     assert.ok(status.result.includes(`project: absent, 0 rules, ${cwd}/.claude/taint-guard.json`), status.result)
 
