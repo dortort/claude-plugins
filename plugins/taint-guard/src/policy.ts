@@ -31,6 +31,8 @@ const RULE_ID = /^[A-Za-z0-9._-]{1,64}$/
 const RULE_REF = /^(preset|managed|user|project):[A-Za-z0-9._-]{1,64}$/
 const REGEX_TEXT_CAP = 100_000
 const REASON_MAX = 1000
+const PROJECT_REGEX_LENGTH_MAX = 256
+const PROJECT_REGEX_COUNT_MAX = 50
 const MERGE_ORDER: readonly LayerName[] = ['managed', 'user', 'project', 'preset']
 const STATUS_ORDER: readonly LayerName[] = ['preset', 'managed', 'user', 'project']
 
@@ -53,7 +55,7 @@ const SELECTOR_KINDS = ['exact', 'prefix', 'regex', 'anyOf'] as const
 const PREDICATE_KINDS = ['equals', 'matches', 'notMatches', 'exists'] as const
 
 type Obj = Record<string, unknown>
-type Ctx = { errors: string[]; untrusted: boolean }
+type Ctx = { errors: string[]; untrusted: boolean; regexes: number }
 type SelectorKind = (typeof SELECTOR_KINDS)[number]
 
 function isObject(value: unknown): value is Obj {
@@ -112,8 +114,14 @@ function checkRegex(ctx: Ctx, value: unknown, flags: unknown, path: string): voi
     fail(ctx, path, `invalid regex: ${messageOf(error)}`)
     return
   }
-  if (ctx.untrusted && hasNestedQuantifier(value)) {
-    fail(ctx, path, 'nested unbounded quantifiers are not allowed in a project policy')
+  if (!ctx.untrusted) return
+  ctx.regexes++
+  if (value.length > PROJECT_REGEX_LENGTH_MAX) {
+    fail(ctx, path, `a regex in a project policy must be at most ${PROJECT_REGEX_LENGTH_MAX} characters`)
+  }
+  if (hasNestedQuantifier(value)) fail(ctx, path, 'nested unbounded quantifiers are not allowed in a project policy')
+  if (hasQuantifiedAlternation(value)) {
+    fail(ctx, path, 'alternation under an unbounded quantifier is not allowed in a project policy')
   }
 }
 
@@ -280,7 +288,7 @@ function checkEntry(ctx: Ctx, entry: unknown, path: string, kind: 'source' | 'si
 
 /** Structural validation of one policy layer; label references are checked by loadPolicy. */
 export function validatePolicy(value: unknown, options?: { layer?: LayerName }): ValidationResult {
-  const ctx: Ctx = { errors: [], untrusted: options?.layer === 'project' }
+  const ctx: Ctx = { errors: [], untrusted: options?.layer === 'project', regexes: 0 }
   if (!isObject(value)) return { ok: false, errors: ['(root): must be an object'] }
   checkKeys(ctx, value, '', TOP_KEYS)
   if (has(value, '$schema')) checkString(ctx, value.$schema, '$schema')
@@ -321,6 +329,9 @@ export function validatePolicy(value: unknown, options?: { layer?: LayerName }):
       continue
     }
     list.forEach((entry, i) => checkEntry(ctx, entry, at(key, i), kind, ids))
+  }
+  if (ctx.regexes > PROJECT_REGEX_COUNT_MAX) {
+    fail(ctx, '', `a project policy may hold at most ${PROJECT_REGEX_COUNT_MAX} regexes; this one has ${ctx.regexes}`)
   }
   return ctx.errors.length === 0 ? { ok: true, policy: value as PolicyFile } : { ok: false, errors: ctx.errors }
 }
@@ -384,6 +395,33 @@ export function hasNestedQuantifier(source: string): boolean {
     } else {
       i++
       afterAtom()
+    }
+  }
+  return false
+}
+
+/** True when a group with a top-level | is followed by an unbounded quantifier, as in (a|aa)+. */
+export function hasQuantifiedAlternation(source: string): boolean {
+  const stack: boolean[] = [false]
+  let i = 0
+  while (i < source.length) {
+    const c = source[i]
+    if (c === '\\') {
+      i += 2
+    } else if (c === '[') {
+      i++
+      while (i < source.length && source[i] !== ']') i += source[i] === '\\' ? 2 : 1
+      i++
+    } else if (c === '(') {
+      i++
+      stack.push(false)
+    } else if (c === ')') {
+      i++
+      const alternation = stack.length > 1 ? (stack.pop() as boolean) : false
+      if (alternation && readQuantifier(source, i)?.unbounded === true) return true
+    } else {
+      if (c === '|') stack[stack.length - 1] = true
+      i++
     }
   }
   return false

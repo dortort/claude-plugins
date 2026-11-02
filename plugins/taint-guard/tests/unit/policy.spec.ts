@@ -7,6 +7,7 @@ import {
   evaluateSinks,
   failSafeDecision,
   hasNestedQuantifier,
+  hasQuantifiedAlternation,
   isSinkActive,
   loadPolicy,
   matchSources,
@@ -337,6 +338,90 @@ describe('validatePolicy', () => {
       'sinks[0].block[0].arguments[0].matches: nested unbounded quantifiers are not allowed in a project policy',
     ])
   })
+
+  it('rejects alternation under an unbounded quantifier only in the project layer', () => {
+    const shapes = ['(a|aa)+$', '(?:.|.)*X', '(?:[a-z]|[a-y])*X', '(a|b){2,}']
+    for (const regex of shapes) {
+      const policy = base({ sinks: [sinkRule('s', { block: [{ tool: { regex } }] })] })
+      assert.deepEqual(errorsOf(policy), [], regex)
+      assert.deepEqual(errorsOf(policy, 'user'), [], regex)
+      assert.deepEqual(errorsOf(policy, 'project'), [
+        'sinks[0].block[0].tool.regex: alternation under an unbounded quantifier is not allowed in a project policy',
+      ], regex)
+    }
+  })
+
+  it('rejects a project regex longer than 256 characters', () => {
+    const policyWith = (length: number) =>
+      base({ sources: [sourceRule('s', { match: { tool: { exact: 'Read' }, arguments: [{ pointer: '/p', matches: 'a'.repeat(length) }] } })] })
+    assert.deepEqual(errorsOf(policyWith(256), 'project'), [])
+    assert.deepEqual(errorsOf(policyWith(257), 'user'), [])
+    assert.deepEqual(errorsOf(policyWith(257), 'project'), [
+      'sources[0].match.arguments[0].matches: a regex in a project policy must be at most 256 characters',
+    ])
+  })
+
+  it('rejects a project layer with more than 50 regexes', () => {
+    const policyWith = (count: number) =>
+      base({
+        sinks: [
+          sinkRule('s', {
+            block: Array.from({ length: count - 1 }, (_, i) => ({ tool: { regex: `^tool${i}$` } })),
+            except: [{ tool: { exact: 'Bash' }, arguments: [{ pointer: '/c', notMatches: '^ls' }] }],
+          }),
+        ],
+      })
+    assert.deepEqual(errorsOf(policyWith(50), 'project'), [])
+    assert.deepEqual(errorsOf(policyWith(51), 'user'), [])
+    assert.deepEqual(errorsOf(policyWith(51), 'project'), ['(root): a project policy may hold at most 50 regexes; this one has 51'])
+  })
+
+  it('accepts a legitimate project regex', () => {
+    const policy = base({
+      sinks: [
+        sinkRule('s', {
+          block: [
+            { tool: { regex: '^mcp__.+__(.*_)?(send|post|reply|forward|create|update|upload|share|schedule|comment|invite)', flags: 'i' } },
+            { tool: { exact: 'Read' }, arguments: [{ pointer: '/file_path', matches: '(^|/)([.]env[^/]*|id_(rsa|ed25519|ecdsa)|credentials)$' }] },
+          ],
+        }),
+      ],
+    })
+    assert.deepEqual(errorsOf(policy, 'project'), [])
+    const { layers, warnings } = load({ project: file('project', policy) })
+    assert.deepEqual(layers.find((l) => l.layer === 'project')?.status, 'loaded')
+    assert.deepEqual(warnings, [])
+  })
+})
+
+describe('hasQuantifiedAlternation', () => {
+  const cases: Array<[string, boolean]> = [
+    ['(a|aa)+$', true],
+    ['(?:.|.)*X', true],
+    ['(?:[a-z]|[a-y])*X', true],
+    ['(a|b){2,}', true],
+    ['(a|b)+?', true],
+    ['((a|b)c)*', false],
+    ['((a|b)+c)', true],
+    ['(?<n>a|b)*', true],
+    ['(a|b)', false],
+    ['(a|b)?', false],
+    ['(a|b){1,5}', false],
+    ['a|b*', false],
+    ['(ab)+', false],
+    ['([a|b])+', false],
+    ['(a\\|b)+', false],
+    ['\\(a|b\\)+', false],
+    ['^mcp__.+__(.*_)?(send|post|reply)', false],
+    ['(^|/)([.]env[^/]*|id_(rsa|ed25519|ecdsa)|credentials)$', false],
+    ['', false],
+    [')+', false],
+  ]
+  for (const [source, expected] of cases) {
+    it(`${JSON.stringify(source)} -> ${expected}`, () => {
+      assert.equal(hasQuantifiedAlternation(source), expected)
+    })
+  }
 })
 
 describe('hasNestedQuantifier', () => {

@@ -51,6 +51,13 @@ describe('validator and schema agree', () => {
       assert.equal(schemaValidate(value), true, JSON.stringify(schemaValidate.errors))
       assert.equal(validatePolicy(value).ok, true)
     })
+    it(`presets/${name}.json validates as the trusted preset layer, free of the project regex limits`, () => {
+      const value = readJson(join(ROOT, 'presets', `${name}.json`))
+      const preset = validatePolicy(value, { layer: 'preset' })
+      assert.equal(preset.ok, true, preset.ok ? '' : preset.errors.join('\n'))
+      const project = validatePolicy(value, { layer: 'project' })
+      assert.equal(project.ok, false, 'the preset should hold regexes a project layer may not')
+    })
   }
 })
 
