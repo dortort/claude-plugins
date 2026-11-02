@@ -366,14 +366,15 @@ rebuild is pending, it refuses:
   `settings.local.json`, and anything under its `taint-guard/` (the audit log) and
   `plugins/` directories;
 - an MCP tool with a write verb (`write`, `edit`, `move`, `delete`, `put`, `save`, …) whose
-  arguments name one of those paths;
-- a `Bash` command whose text mentions `taint-guard`, `.claude/settings` or
+  arguments name one of those paths, or, for a move, rename or delete, a directory that
+  holds one of them (`~/.claude` itself); a call whose arguments are too many or too deeply
+  nested to inspect is refused as well;
+- a `Bash` command whose text mentions `taint-guard`, a `.claude` directory or
   `settings.local.json`.
 
 It applies in every `mode`, `audit` included, and no policy file can switch it off. The
 `Bash` check is best effort: it reads the command's text, so a command that builds the path
-at run time (`cd ~/.claude && sed -i … settings.json`, a variable, an encoding) is not
-recognised. Refusals name the rule and are audited as `deny` entries with
+at run time (a variable such as `$CLAUDE_CONFIG_DIR`, an encoding) is not recognised. Refusals name the rule and are audited as `deny` entries with
 `rule: "builtin:self-protect"`.
 
 ## What Claude and the user see

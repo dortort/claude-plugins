@@ -97,3 +97,36 @@ describe('selfProtect', () => {
     assert.equal(hasWriteVerb('mcp__fs__get_settings'), false)
   })
 })
+
+describe('selfProtect at its limits', () => {
+  it('checks destination keys even when other arguments fill the scan', () => {
+    const edits = Array.from({ length: 150 }, (_, i) => ({ oldText: `a${i}`, newText: `b${i}` }))
+    assert.ok(check('mcp__filesystem__edit_file', { edits, path: '~/.claude/settings.json' }))
+  })
+
+  it('fails closed when the arguments are too many or too deep to inspect', () => {
+    const many = Array.from({ length: 250 }, (_, i) => `line ${i}`)
+    assert.ok(check('mcp__filesystem__write_file', { content: many, where: '/work/repo/out.txt' }))
+    let deep: unknown = '/work/repo/out.txt'
+    for (let i = 0; i < 10; i += 1) deep = { next: deep }
+    assert.ok(check('mcp__filesystem__write_file', { spec: deep }))
+    assert.equal(check('mcp__filesystem__write_file', { path: '/work/repo/out.txt', content: 'x' }), null)
+  })
+
+  it('refuses moving or deleting a directory that holds protected paths', () => {
+    assert.ok(check('mcp__filesystem__move_file', { source: '~/.claude', destination: '/tmp/disabled' }))
+    assert.ok(check('mcp__filesystem__delete_directory', { path: '/home/tester' }))
+    assert.ok(check('mcp__filesystem__move_file', { source: '/', destination: '/tmp/x' }))
+    assert.equal(check('mcp__filesystem__move_file', { source: '/work/repo/a.txt', destination: '/work/repo/b.txt' }), null)
+  })
+
+  it('a write to an ancestor directory is not a move: creating a file beside it is allowed', () => {
+    assert.equal(check('mcp__filesystem__write_file', { path: '/home/tester/notes.txt', content: 'x' }), null)
+  })
+
+  it('refuses Bash commands that touch a .claude directory, not .claude-plugin', () => {
+    assert.ok(check('Bash', { command: 'mv ~/.claude /tmp/x' }))
+    assert.ok(check('Bash', { command: 'rm -rf "$HOME/.claude"' }))
+    assert.equal(check('Bash', { command: 'cat plugins/x/.claude-plugin/plugin.json' }), null)
+  })
+})

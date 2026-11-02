@@ -40,7 +40,9 @@ const WRITE_VERBS = [
   'overwrite',
   'mkdir',
 ]
-const BASH_MENTION = /taint-guard|\.claude[\\/]+settings|settings\.local\.json/i
+const BASH_MENTION = /taint-guard|\.claude(?![\w-])|settings\.local\.json/i
+const DESTRUCTIVE_VERBS = ['move', 'rename', 'delete', 'remove', 'rmdir']
+const DESTINATION_KEYS = ['path', 'file_path', 'filepath', 'filename', 'source', 'destination', 'dest', 'target', 'from', 'to', 'uri', 'directory', 'dir']
 const MAX_STRINGS = 200
 const MAX_DEPTH = 6
 
@@ -90,10 +92,11 @@ export function protectedPaths(input: ProtectedPathsInput): ProtectedPath[] {
   return out
 }
 
-function isProtected(raw: string, paths: readonly ProtectedPath[], env: ProtectEnv): boolean {
+function isProtected(raw: string, paths: readonly ProtectedPath[], env: ProtectEnv, ancestors = false): boolean {
   if (raw.trim() === '') return false
   const path = normalizePath(raw, env)
-  return paths.some((p) => path === p.path || (p.isDir && path.startsWith(`${p.path}/`)))
+  const isAncestor = (p: ProtectedPath): boolean => ancestors && (path === '/' || p.path.startsWith(`${path}/`))
+  return paths.some((p) => path === p.path || (p.isDir && path.startsWith(`${p.path}/`)) || isAncestor(p))
 }
 
 function words(name: string): string[] {
@@ -104,17 +107,27 @@ function words(name: string): string[] {
     .filter((word) => word !== '')
 }
 
-/** Whether an MCP tool's own name (after `mcp__<server>__`) carries a write verb. */
-export function hasWriteVerb(tool: string): boolean {
+function hasVerb(tool: string, verbs: readonly string[]): boolean {
   const name = tool.split('__').slice(2).join('__')
-  return words(name).some((word) => WRITE_VERBS.some((verb) => word === verb || (verb.length >= 4 && word.startsWith(verb))))
+  return words(name).some((word) => verbs.some((verb) => word === verb || (verb.length >= 4 && word.startsWith(verb))))
 }
 
-function strings(value: unknown, out: string[], depth: number): void {
-  if (out.length >= MAX_STRINGS || depth > MAX_DEPTH) return
-  if (typeof value === 'string') out.push(value)
-  else if (Array.isArray(value)) for (const item of value) strings(item, out, depth + 1)
-  else if (typeof value === 'object' && value !== null) for (const item of Object.values(value)) strings(item, out, depth + 1)
+/** Whether an MCP tool's own name (after `mcp__<server>__`) carries a write verb. */
+export function hasWriteVerb(tool: string): boolean {
+  return hasVerb(tool, WRITE_VERBS)
+}
+
+/** Collects string values; returns false when the limits cut the scan short. */
+function strings(value: unknown, out: string[], depth: number): boolean {
+  if (typeof value === 'string') {
+    if (out.length >= MAX_STRINGS) return false
+    out.push(value)
+    return true
+  }
+  if (typeof value !== 'object' || value === null) return true
+  if (depth >= MAX_DEPTH) return false
+  const items = Array.isArray(value) ? value : Object.values(value)
+  return items.every((item) => strings(item, out, depth + 1))
 }
 
 /** The built-in rule's verdict on a call that would change TaintGuard's policy, settings or audit log, or null. */
@@ -130,9 +143,13 @@ export function selfProtect(call: ToolCall, paths: readonly ProtectedPath[], env
   }
   if (call.tool === 'Bash') return typeof args.command === 'string' && BASH_MENTION.test(args.command) ? hit : null
   if (call.tool.startsWith('mcp__') && hasWriteVerb(call.tool)) {
+    const ancestors = hasVerb(call.tool, DESTRUCTIVE_VERBS)
+    const named = DESTINATION_KEYS.map((key) => args[key]).filter((value): value is string => typeof value === 'string')
+    if (named.some((value) => isProtected(value, paths, env, ancestors))) return hit
     const found: string[] = []
-    strings(args, found, 0)
-    return found.some((value) => isProtected(value, paths, env)) ? hit : null
+    const isComplete = strings(args, found, 0)
+    if (!isComplete) return hit
+    return found.some((value) => isProtected(value, paths, env, ancestors)) ? hit : null
   }
   return null
 }
