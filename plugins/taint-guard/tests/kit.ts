@@ -125,7 +125,7 @@ export type Kit = ReturnType<typeof engine>
 export function engine(on: On, options: KitOptions = {}) {
   let now = T0
   const waits: Wait[] = []
-  const faults = { clock: false }
+  const faults = { clock: false, store: false, taintWrite: false }
   let gate: Promise<void> | null = null
   const files = new Map<string, string>(Object.entries(options.files ?? {}))
   const store = new Map<string, unknown>(Object.entries(options.store ?? {}))
@@ -157,7 +157,14 @@ export function engine(on: On, options: KitOptions = {}) {
   on('clock.after', hold)
   on('clock.sleep', hold)
 
-  on('store.get', (_$, e) => ({ value: store.get(e.key) }))
+  on('store.get', (_$, e) => {
+    if (faults.store) return { deny: 'the store is unavailable' }
+    return { value: store.get(e.key) }
+  })
+  on('state.set', (_$, e, next) => {
+    if (faults.taintWrite && e.plugin === 'taint-guard' && e.key === 'taint') return { deny: 'the state is unavailable' }
+    return next(e)
+  })
   on('store.set', (_$, e) => {
     store.set(e.key, JSON.parse(JSON.stringify(e.value)))
     return { value: undefined }

@@ -388,6 +388,11 @@ export function clearRefusedText(policyFrom: string): string {
   return `Declassification is disabled by the ${policyFrom} policy (userDeclassify: never).`
 }
 
+/** The reply while the taint set is not yet rebuilt, so what a clear would remove is not known. */
+export function clearPendingText(): string {
+  return 'TaintGuard has not yet rebuilt the taint set for this session, so nothing can be cleared now; labels unchanged. Try again shortly.'
+}
+
 /** The reply when the user declines the confirmation. */
 export function clearDeclinedText(): string {
   return 'Declassification cancelled; labels unchanged.'

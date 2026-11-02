@@ -55,6 +55,7 @@ import {
   auditReport,
   bandText,
   clearDeclinedText,
+  clearPendingText,
   clearRefusedText,
   clearedText,
   denyText,
@@ -85,6 +86,8 @@ import {
 
 type Dollar = EngineInterface
 
+type PendingRebuild = { origin: 'restart' | 'resume' | 'fork'; previous?: string }
+
 type Ctx = {
   options: TaintGuardOptions
   loaded: LoadedPolicy | null
@@ -102,6 +105,7 @@ type Ctx = {
   backgroundStarts: Map<string, number>
   refusals: Map<string, number>
   knownTools: Set<string>
+  pending: PendingRebuild | null
 }
 
 const PLUGIN = 'taint-guard'
@@ -150,8 +154,14 @@ async function callEntry(
   audit.append(entry)
 }
 
+/** Why every label counts as held: the policy's lockdown, or a taint rebuild that has not finished. */
+function holdReason(ctx: Ctx): string | null {
+  if (ctx.loaded?.lockdown) return ctx.loaded.lockdown
+  return ctx.pending === null || !ctx.enabled ? null : `the taint set is not yet rebuilt after ${ctx.pending.origin}`
+}
+
 function heldLabels(ctx: Ctx, policy: CompiledPolicy, taint: TaintSnapshot): string[] {
-  return ctx.loaded?.lockdown ? allLabels(policy) : [...taint.labels]
+  return holdReason(ctx) !== null ? allLabels(policy) : [...taint.labels]
 }
 
 function toCall(e: Readonly<Record<string, unknown>> & { tool: string; tool_use_id: string; agentId?: string }): ToolCall {
@@ -339,7 +349,13 @@ async function agentTranscripts($: Dollar, messages: readonly SessionMessage[]):
   return { transcripts, unknown }
 }
 
-async function rebuildTaint($: Dollar, policy: CompiledPolicy, copy: StoredTaint | null, at: number): Promise<RebuildResult> {
+async function rebuildTaint(
+  $: Dollar,
+  policy: CompiledPolicy,
+  copy: StoredTaint | null,
+  at: number,
+  unknownHistory: boolean,
+): Promise<RebuildResult> {
   let messages: SessionMessage[] = []
   let historyLimit = HISTORY_LIMIT
   try {
@@ -356,7 +372,7 @@ async function rebuildTaint($: Dollar, policy: CompiledPolicy, copy: StoredTaint
     onUnknownHistory: policy.onUnknownHistory,
     storeCopy: copy,
     historyLimit,
-    unknownHistory: agents.unknown,
+    unknownHistory: unknownHistory || agents.unknown,
     at,
   })
 }
@@ -367,6 +383,42 @@ async function applyRebuild($: Dollar, ctx: Ctx, origin: string, result: Rebuild
   if (result.added.length === 0) return
   append(ctx, at, { event: 'rebuild', labels: result.added, detail: rebuildDetail(origin, result.records, result.truncated) })
   await saveStore($, ctx, merged, at)
+}
+
+async function storedCopy($: Dollar, ctx: Ctx, pending: PendingRebuild): Promise<StoredTaint | null> {
+  const own = parseStored(await $.store.get(storeKey(ctx.sessionId)))
+  const previous = pending.previous
+  const isFork = pending.origin === 'fork' && previous !== undefined && previous !== '' && previous !== ctx.sessionId
+  const parent = isFork ? parseStored(await $.store.get(storeKey(previous))) : null
+  return mergeStored(own, parent)
+}
+
+async function runRebuild($: Dollar, ctx: Ctx, pending: PendingRebuild): Promise<void> {
+  const { policy } = await ensureLoaded($, ctx)
+  if (pending.origin === 'restart' && (await $.state.get({ plugin: 'taint-guard', key: 'taint' })).version !== 0) return
+  if (ctx.sessionId === '') ctx.sessionId = await $.session.id()
+  const at = await safeNow($)
+  let copy: StoredTaint | null = null
+  let unreadable = false
+  try {
+    copy = await storedCopy($, ctx, pending)
+  } catch {
+    unreadable = true
+  }
+  ctx.clearedThrough = copy?.clearedThrough
+  await applyRebuild($, ctx, pending.origin, await rebuildTaint($, policy, copy, at, unreadable), at)
+}
+
+/** Finishes a pending restart, resume or fork rebuild; on failure it stays pending, so every label stays held. */
+async function ensureRebuilt($: Dollar, ctx: Ctx): Promise<void> {
+  const pending = ctx.pending
+  if (pending === null) return
+  try {
+    await runRebuild($, ctx, pending)
+    if (ctx.pending === pending) ctx.pending = null
+  } catch (error) {
+    $.ui.log(`TaintGuard could not rebuild the taint set after ${pending.origin}: ${messageOf(error)}`, { to: 'debug' })
+  }
 }
 
 async function summaryFor($: Dollar, policy: CompiledPolicy, labels: readonly string[]): Promise<ActiveSummary> {
@@ -383,7 +435,7 @@ async function syncHeadlessBand($: Dollar, ctx: Ctx): Promise<void> {
   if (!ctx.headless || !ctx.enabled || !ctx.options.showBand || loaded === null) return
   const taint = await read($, taintAtom)
   const summary = await summaryFor($, loaded.policy, heldLabels(ctx, loaded.policy, taint))
-  const text = bandText({ taint, lockdown: loaded.lockdown, summary })
+  const text = bandText({ taint, lockdown: holdReason(ctx), summary })
   if (text !== null && text !== ctx.lastBandLogged) $.ui.log(text)
   ctx.lastBandLogged = text
 }
@@ -395,7 +447,7 @@ async function noteTool($: Dollar, ctx: Ctx, tool: string): Promise<void> {
 }
 
 async function refuse($: Dollar, ctx: Ctx, tool: string, rule: string, text: string): Promise<{ deny: string }> {
-  await update($, taintAtom, countBlocked)
+  await update($, taintAtom, countBlocked).catch(() => undefined)
   noteRefusal($, ctx, tool, rule)
   return { deny: text }
 }
@@ -462,7 +514,9 @@ async function grown(
 
 async function statusText($: Dollar, ctx: Ctx): Promise<string> {
   const current = await ensureLoaded($, ctx)
-  const { policy, lockdown } = current
+  if (ctx.enabled) await ensureRebuilt($, ctx)
+  const { policy } = current
+  const lockdown = holdReason(ctx)
   const taint = await read($, taintAtom)
   const held = heldLabels(ctx, policy, taint)
   const active = new Set(held)
@@ -484,7 +538,9 @@ async function statusText($: Dollar, ctx: Ctx): Promise<string> {
 async function explainCommand($: Dollar, ctx: Ctx, rest: string): Promise<string> {
   const parsed = parseExplainArgs(rest)
   if ('error' in parsed) return parsed.error
-  const { policy, lockdown } = await ensureLoaded($, ctx)
+  const { policy } = await ensureLoaded($, ctx)
+  if (ctx.enabled) await ensureRebuilt($, ctx)
+  const lockdown = holdReason(ctx)
   const taint = await read($, taintAtom)
   const call: ToolCall = { tool: parsed.tool, args: parsed.args }
   return explainReport({
@@ -513,6 +569,8 @@ async function clearCommand($: Dollar, ctx: Ctx, e: CommandRunInput, rest: strin
   }
   const { policy } = await ensureLoaded($, ctx)
   if (policy.userDeclassify === 'never') return clearRefusedText(policy.userDeclassifyFrom)
+  await ensureRebuilt($, ctx)
+  if (ctx.pending !== null) return clearPendingText()
   const { labels } = parseClearArgs(rest)
   const before = await read($, taintAtom)
   const preview = removeLabels(before, labels)
@@ -594,7 +652,7 @@ async function startSession(
 ): Promise<void> {
   ctx.headless = !e.isInteractive || e.surface === null
   ctx.sessionId = await $.session.id()
-  const { policy } = await loadAll($, ctx, e.cwd)
+  await loadAll($, ctx, e.cwd)
   await openAudit($, ctx)
   await $.command.register({
     name: 'taintguard',
@@ -602,7 +660,7 @@ async function startSession(
     argumentHint: '[explain <tool> [json] | tools | clear [label…] | reload | audit]',
     immediate: true,
   })
-  const at = await $.clock.now()
+  const at = await safeNow($)
   auditLockdown(ctx, at)
   if (!ctx.enabled) {
     if (ctx.audit !== null && (await $.store.get(DISABLED_KEY)) !== ctx.sessionId) {
@@ -611,11 +669,8 @@ async function startSession(
     }
     return
   }
+  await ensureRebuilt($, ctx)
   await pruneStore($, ctx, at)
-  const own = parseStored(await $.store.get(storeKey(ctx.sessionId)))
-  ctx.clearedThrough = own?.clearedThrough
-  const state = await $.state.get({ plugin: 'taint-guard', key: 'taint' })
-  if (state.version === 0) await applyRebuild($, ctx, 'restart', await rebuildTaint($, policy, own, at), at)
   await syncHeadlessBand($, ctx)
 }
 
@@ -626,7 +681,9 @@ async function guardCall(
   next: () => Promise<ToolCallResult>,
 ): Promise<ToolCallResult> {
   const at = await $.clock.now()
-  const { policy, lockdown } = await ensureLoaded($, ctx)
+  const { policy } = await ensureLoaded($, ctx)
+  await ensureRebuilt($, ctx)
+  const lockdown = holdReason(ctx)
   await noteTool($, ctx, e.tool)
   const call = toCall(e)
   const before = await read($, taintAtom)
@@ -707,12 +764,12 @@ async function classicStart(
   ctx: Ctx,
   e: { source: 'startup' | 'resume' | 'clear' | 'compact' | 'fork'; session_id: string },
 ): Promise<void> {
-  const previous = ctx.sessionId
+  if (e.source === 'resume' || e.source === 'fork') ctx.pending = { origin: e.source, previous: ctx.sessionId }
   await switchSession(ctx, e.session_id)
   if (!(await isOn($, ctx))) return
   const { policy } = await ensureLoaded($, ctx)
-  const at = await $.clock.now()
   if (e.source === 'clear') {
+    const at = await $.clock.now()
     const both = unionTaint(await read($, taintAtom), ctx.carry ?? EMPTY_TAINT, at)
     ctx.carry = null
     ctx.clearedThrough = undefined
@@ -723,13 +780,8 @@ async function classicStart(
       await update($, taintAtom, () => both)
       if (both.labels.length > 0) await saveStore($, ctx, both, at)
     }
-  } else if (e.source === 'resume' || e.source === 'fork') {
-    const own = parseStored(await $.store.get(storeKey(e.session_id)))
-    const isFork = e.source === 'fork' && previous !== '' && previous !== e.session_id
-    const parent = isFork ? parseStored(await $.store.get(storeKey(previous))) : null
-    const copy = mergeStored(own, parent)
-    ctx.clearedThrough = copy?.clearedThrough
-    await applyRebuild($, ctx, e.source, await rebuildTaint($, policy, copy, at), at)
+  } else {
+    await ensureRebuilt($, ctx)
   }
   await syncHeadlessBand($, ctx)
 }
@@ -766,7 +818,9 @@ async function noteBackground(
 }
 
 async function promptContext($: Dollar, ctx: Ctx): Promise<string | null> {
-  const { policy, lockdown } = await ensureLoaded($, ctx)
+  const { policy } = await ensureLoaded($, ctx)
+  await ensureRebuilt($, ctx)
+  const lockdown = holdReason(ctx)
   const taint = await read($, taintAtom)
   if (lockdown === null && taint.labels.length === 0) return null
   return promptContextLine({
@@ -808,6 +862,7 @@ export const register: Register = (on, rawOptions) => {
     backgroundStarts: new Map(),
     refusals: new Map(),
     knownTools: new Set(),
+    pending: { origin: 'restart' },
   }
 
   on('session.start', async ($, e, next) => {
@@ -847,7 +902,9 @@ export const register: Register = (on, rawOptions) => {
 
   on('session.compact', async ($, e, next) => {
     if (!(await isOn($, ctx))) return next(e)
-    const labels = [...(await read($, taintAtom)).labels]
+    const { policy } = await ensureLoaded($, ctx)
+    await ensureRebuilt($, ctx)
+    const labels = ctx.pending === null ? [...(await read($, taintAtom)).labels] : allLabels(policy)
     if (labels.length === 0) return next(e)
     const result = await next({ ...e, instructions: compactInstructions(e.instructions, labels) })
     if (result.skip !== undefined) return result
