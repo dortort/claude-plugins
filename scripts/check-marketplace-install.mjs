@@ -7,6 +7,15 @@ import { checkCatalog, managedPlugins, publishedRelease } from './marketplace.mj
 
 const catalog = JSON.parse(readFileSync(new URL('../.claude-plugin/marketplace.json', import.meta.url), 'utf8'));
 checkCatalog(catalog);
+const releasedFiles = {
+  scheduler: ['dist/cli/index.js'],
+  'artifact-callbacks': ['sidecar/listener.ts'],
+  'artifact-callbacks-channel': ['sidecar/listener.ts'],
+  'taint-guard': ['hooks/register.tsx', 'schema/taint-guard.schema.json', 'presets/trifecta.json', 'presets/strict.json'],
+};
+for (const name of managedPlugins) {
+  assert(releasedFiles[name], `No installed files are known for ${name}`);
+}
 const scratch = mkdtempSync(join(tmpdir(), 'marketplace-install-'));
 const env = { ...process.env, CLAUDE_CONFIG_DIR: join(scratch, 'config') };
 
@@ -45,11 +54,12 @@ try {
     assert.equal(manifest.name, name);
     assert.equal(manifest.version, entry.version);
     execFileSync('claude', ['plugin', 'validate', plugin.installPath], { env, stdio: 'pipe' });
+    for (const file of releasedFiles[name]) {
+      assert(existsSync(join(plugin.installPath, file)), `${name} must install ${file}`);
+    }
     if (name === 'scheduler') {
       execFileSync(process.execPath, [join(plugin.installPath, 'dist/cli/index.js'),
         'validate-schedule', '--input', '0 9 * * 1-5'], { env, stdio: 'inherit' });
-    } else {
-      assert(existsSync(join(plugin.installPath, 'sidecar/listener.ts')));
     }
     console.log(`Verified published ${name}@${plugin.version}; local unreleased source was not installed`);
   }
