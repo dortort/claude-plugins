@@ -407,9 +407,7 @@ async function storedCopy($: Dollar, ctx: Ctx, pending: PendingRebuild): Promise
 
 async function runRebuild($: Dollar, ctx: Ctx, pending: PendingRebuild): Promise<void> {
   const { policy } = await ensureLoaded($, ctx)
-  if (pending.origin === 'restart' && (await $.state.get({ plugin: 'taint-guard', key: 'taint' })).version !== 0) return
   if (ctx.sessionId === '') ctx.sessionId = await $.session.id()
-  const at = await safeNow($)
   let copy: StoredTaint | null = null
   let unreadable = false
   try {
@@ -418,6 +416,8 @@ async function runRebuild($: Dollar, ctx: Ctx, pending: PendingRebuild): Promise
     unreadable = true
   }
   ctx.clearedThrough = copy?.clearedThrough
+  if (pending.origin === 'restart' && (await $.state.get({ plugin: 'taint-guard', key: 'taint' })).version !== 0) return
+  const at = await safeNow($)
   await applyRebuild($, ctx, pending.origin, await rebuildTaint($, policy, copy, at, unreadable), at)
 }
 
