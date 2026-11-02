@@ -37,9 +37,7 @@ where mods don't load, or when clicks should reach Claude mid-turn; see
 [Mod or channel build?](plugins/artifact-callbacks/README.md#mod-or-channel-build) and its
 [documentation](plugins/artifact-callbacks-channel/README.md).
 TaintGuard is a mod that needs Claude Code **2.1.287+ in the terminal** or **2.1.286+ in
-Desktop's Code tab** and nothing else at runtime (no Node.js); its catalog entry arrives
-with its first promoted release, so until then load it with
-`claude --plugin-dir ./plugins/taint-guard`. See its
+Desktop's Code tab** and nothing else at runtime (no Node.js). See its
 [documentation](plugins/taint-guard/README.md) and, for organizations, the
 [deployment guide](plugins/taint-guard/docs/deployment.md).
 Skills remain in their own repository so they can also be copied or used with other
@@ -70,11 +68,12 @@ the scheduler's published npm package, which includes compiled JavaScript, rathe
 than its unbuilt source directory. Its npm name remains `@dortort/scheduler`.
 The skills entry references the independently maintained `dortort/skills` repository
 directly. The callback variants ship their TypeScript sources as they are (Node >=
-22.18 runs them without a build step). Their entries use released Git subdirectories,
-pinned by release tag and full commit SHA.
+22.18 runs them without a build step), and TaintGuard ships its hooks module, which
+Claude Code runs itself. Their entries use released Git subdirectories, pinned by
+release tag and full commit SHA.
 
-The three plugins maintained here install exact published releases: the scheduler pins
-an npm version, and both callback variants pin a tag and commit. Merging development
+The four plugins maintained here install exact published releases: the scheduler pins
+an npm version, and the callback variants and TaintGuard pin a tag and commit. Merging development
 changes does not advance those pins. A release is made available to marketplace users
 by merging a separate catalog promotion PR; see [Releasing plugins](RELEASING.md).
 
