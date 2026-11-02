@@ -20,8 +20,8 @@ claude plugin marketplace add dortort/claude-plugins
 claude plugin install taint-guard@dortort
 ```
 
-The `taint-guard` catalog entry arrives with the first promoted release (see
-[Releases](#releases)). Until then, load it from a checkout of this repository:
+The catalog installs the latest promoted release (see [Releases](#releases)). To try
+unreleased changes, load it from a checkout of this repository instead:
 
 ```bash
 claude --plugin-dir ./plugins/taint-guard
