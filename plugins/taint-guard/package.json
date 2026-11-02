@@ -1,0 +1,24 @@
+{
+  "name": "@dortort/taint-guard-dev",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Dev scripts for the TaintGuard mod (the plugin itself ships no node_modules)",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "test": "npm run test:unit",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck:hooks": "tsc --noEmit -p tsconfig.json",
+    "test:unit": "node --test \"tests/unit/*.spec.ts\"",
+    "test:hooks": "claude plugin test .",
+    "validate": "claude plugin validate ."
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "ajv": "^8.20.0",
+    "typescript": "^7.0.2"
+  }
+}

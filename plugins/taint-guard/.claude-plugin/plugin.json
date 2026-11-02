@@ -1,0 +1,67 @@
+{
+  "name": "taint-guard",
+  "version": "0.1.0",
+  "description": "Remember which sensitive or untrusted sources entered a session and refuse risky tool calls once they have",
+  "author": {
+    "name": "dortort"
+  },
+  "license": "MIT",
+  "keywords": [
+    "security",
+    "taint",
+    "prompt-injection",
+    "exfiltration",
+    "mcp",
+    "mod"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "description": "Master switch. Ignored when managed policy sets enabled: true",
+      "default": true
+    },
+    "preset": {
+      "type": "string",
+      "title": "Preset",
+      "description": "Built-in rule pack loaded beneath the policy files; a preset set in managed policy is a floor",
+      "default": "trifecta",
+      "options": [
+        "strict",
+        "trifecta",
+        "none"
+      ]
+    },
+    "userPolicyPath": {
+      "type": "string",
+      "title": "User policy file",
+      "description": "Path of the user policy layer",
+      "default": "~/.claude/taint-guard.json"
+    },
+    "managedPolicyPath": {
+      "type": "string",
+      "title": "Managed policy file",
+      "description": "Managed policy layer; read only from managed settings, ignored in user settings",
+      "default": ""
+    },
+    "showBand": {
+      "type": "boolean",
+      "title": "Show band",
+      "description": "Draw the taint band above the prompt while the session is tainted",
+      "default": true
+    },
+    "auditLog": {
+      "type": "boolean",
+      "title": "Audit log",
+      "description": "Write the JSONL audit log under ~/.claude/taint-guard/audit",
+      "default": true
+    },
+    "auditArguments": {
+      "type": "boolean",
+      "title": "Audit raw arguments",
+      "description": "Also log the first 200 characters of raw tool arguments; a keyed hash is always logged",
+      "default": false
+    }
+  }
+}
