@@ -1,4 +1,4 @@
-name: Release Artifact Callbacks
+name: Release Artifact Callbacks and TaintGuard
 
 on:
   workflow_dispatch:
@@ -10,6 +10,7 @@ on:
         options:
           - artifact-callbacks
           - artifact-callbacks-channel
+          - taint-guard
 
 permissions:
   contents: write
@@ -33,9 +34,14 @@ jobs:
           node-version: '22.18.0'
       - name: Check stable marketplace pins
         run: node scripts/marketplace.mjs check
-      - name: Require successful Artifact Callbacks CI for this commit
+      - name: Require successful CI of the plugin's own workflow for this commit
         run: |
-          gh run list --repo "$GITHUB_REPOSITORY" --workflow artifact-callbacks.yml \
+          case "$PLUGIN" in
+            artifact-callbacks|artifact-callbacks-channel) workflow=artifact-callbacks.yml ;;
+            taint-guard) workflow=taint-guard.yml ;;
+            *) echo "No CI workflow is known for $PLUGIN" >&2; exit 1 ;;
+          esac
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" \
             --commit "$GITHUB_SHA" --branch main --limit 1 --json status,conclusion \
             | jq -e 'length == 1 and all(.[]; .status == "completed" and .conclusion == "success")'
       - name: Check release metadata
@@ -45,7 +51,7 @@ jobs:
           import assert from 'node:assert/strict';
           import { appendFileSync, readFileSync } from 'node:fs';
           const plugin = process.env.PLUGIN;
-          assert(['artifact-callbacks', 'artifact-callbacks-channel'].includes(plugin));
+          assert(['artifact-callbacks', 'artifact-callbacks-channel', 'taint-guard'].includes(plugin));
           const root = `plugins/${plugin}`;
           const read = file => JSON.parse(readFileSync(`${root}/${file}`, 'utf8'));
           const manifest = read('.claude-plugin/plugin.json');
@@ -74,7 +80,12 @@ jobs:
         run: |
           node --input-type=module <<'JS'
           import { appendFileSync } from 'node:fs';
+          import { pathToFileURL } from 'node:url';
+          const { managedPlugins } = await import(pathToFileURL('scripts/marketplace.mjs').href);
+          const plugin = process.env.PLUGIN;
           const version = process.env.TAG.split('--v').at(-1);
+          const first = managedPlugins.includes(plugin) ? '' :
+            `${plugin} has no catalog entry yet: its promotion PR first adds it to managedPlugins in scripts/marketplace.mjs, to the install check and to .claude-plugin/marketplace.json, then runs:\n\n`;
           appendFileSync(process.env.GITHUB_STEP_SUMMARY,
-            `Release published. Promote it through a catalog PR after a clean install check:\n\nnode scripts/marketplace.mjs promote ${process.env.PLUGIN} ${version}\n\nThe current marketplace pin stays in place until that PR is merged.\n`);
+            `Release published. Promote it through a catalog PR after a clean install check:\n\n${first}node scripts/marketplace.mjs promote ${plugin} ${version}\n\nThe current marketplace pin stays in place until that PR is merged.\n`);
           JS
