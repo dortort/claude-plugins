@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:hooks": "tsc --noEmit -p tsconfig.json",
     "test:unit": "node --test \"tests/unit/*.spec.ts\"",
+    "test:e2e": "node --test \"tests/e2e/*.spec.ts\"",
     "test:hooks": "claude plugin test .",
     "validate": "claude plugin validate ."
   },
