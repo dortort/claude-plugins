@@ -8,11 +8,11 @@ The `dortort` marketplace for Claude Code plugins, mods, and agent skills.
 claude plugin marketplace add dortort/claude-plugins
 claude plugin install scheduler@dortort
 claude plugin install dortort@dortort
+claude plugin install taint-guard@dortort
 # Choose ONE Artifact Callbacks variant; do not enable both in the same session.
 claude plugin install artifact-callbacks@dortort
 # Or use the research-preview channel alternative:
 claude plugin install artifact-callbacks-channel@dortort
-claude plugin install taint-guard@dortort
 ```
 
 Install any of them:
