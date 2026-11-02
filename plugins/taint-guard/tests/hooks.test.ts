@@ -487,6 +487,21 @@ describe('persistence', () => {
 })
 
 describe('review fixes', () => {
+  test('clear keeps a label that arrived while its confirmation was open', async ($, on) => {
+    const kit = engine(on, { files: EXAMPLE })
+    await taintWithMail($, kit)
+    const cut = kit.messages().at(-1)?.toolUses[0]?.tool_use_id
+    kit.answer(async () => {
+      await call($, 'Read', { file_path: '/work/.env' })
+      return 'Clear'
+    })
+    expect(await command($, 'clear')).toBe(
+      'TaintGuard cleared private, untrusted. Still present: secret. Kept secret, which arrived while you were confirming.',
+    )
+    expect(await labels($)).toEqual(['secret'])
+    expect(kit.store.get(`taint:${SESSION_ID}`)).toMatchObject({ labels: ['secret'], clearedThrough: cut })
+  })
+
   test('an ask names the destination first and keeps the end of a long call', async ($, on) => {
     const kit = engine(on, { files: EXAMPLE, answers: ['Refuse', 'Refuse'] })
     await taintWithMail($, kit)

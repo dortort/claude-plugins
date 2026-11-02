@@ -509,6 +509,14 @@ describe('declassification texts', () => {
     assert.equal(clearDeclinedText(), 'Declassification cancelled; labels unchanged.')
     assert.equal(nothingToClearText(), 'TaintGuard: nothing to clear; no matching label is present.')
   })
+
+  it('names labels that arrived during the confirmation', () => {
+    assert.equal(
+      clearedText(['private'], ['secret'], ['secret']),
+      'TaintGuard cleared private. Still present: secret. Kept secret, which arrived while you were confirming.',
+    )
+    assert.equal(clearedText(['private'], [], []), 'TaintGuard cleared private. The session is clean.')
+  })
 })
 
 describe('askSummary', () => {

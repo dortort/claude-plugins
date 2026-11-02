@@ -106,12 +106,14 @@ export type KitOptions = {
   messages?: SessionMessage[]
   agents?: Record<string, SessionMessage[]>
   store?: Record<string, unknown>
-  /** `$.ui.ask` answers in order; `null`, or running out, dismisses. */
-  answers?: Array<string | null>
+  /** `$.ui.ask` answers in order; `null`, or running out, dismisses; a function answers once it settles. */
+  answers?: Answer[]
   tools?: Record<string, ToolAnswer>
   compact?: SessionCompactResult
   env?: Record<string, string>
 }
+
+export type Answer = string | null | (() => Promise<string | null>)
 
 type Wait = { due: number; resolve: () => void }
 type Asked = { question: string; options: string[]; header: string }
@@ -199,13 +201,14 @@ export function engine(on: On, options: KitOptions = {}) {
     return { value: undefined }
   })
 
-  on('tool.call', (_$, e) => {
+  on('tool.call', async (_$, e) => {
     const input = e as unknown as Readonly<Record<string, unknown>>
     if (e.tool === 'AskUserQuestion') {
       const q = (input.questions as Array<{ question: string; header: string; options: Array<{ label: string }> }>)[0]
       const question = q?.question ?? ''
       asked.push({ question, header: q?.header ?? '', options: (q?.options ?? []).map((o) => o.label) })
-      const answer = answers.shift()
+      const next = answers.shift()
+      const answer = typeof next === 'function' ? await next() : next
       if (answer === undefined || answer === null) return { deny: 'dismissed' }
       return { result: { questions: input.questions, answers: { [question]: answer } } } as ToolCallResult
     }
@@ -296,7 +299,7 @@ export function engine(on: On, options: KitOptions = {}) {
       agents[id] = next
     },
 
-    answer(...next: Array<string | null>): void {
+    answer(...next: Answer[]): void {
       answers.push(...next)
     },
 

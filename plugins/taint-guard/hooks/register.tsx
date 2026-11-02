@@ -503,8 +503,13 @@ async function clearCommand($: Dollar, ctx: Ctx, e: CommandRunInput, rest: strin
   const { policy } = await ensureLoaded($, ctx)
   if (policy.userDeclassify === 'never') return clearRefusedText(policy.userDeclassifyFrom)
   const { labels } = parseClearArgs(rest)
-  const preview = removeLabels(await read($, taintAtom), labels)
+  const before = await read($, taintAtom)
+  const preview = removeLabels(before, labels)
   if (preview.removed.length === 0) return nothingToClearText()
+  let cut: string | undefined
+  try {
+    cut = lastToolUseId(await $.session.messages())
+  } catch {}
   if (policy.userDeclassify === 'confirm') {
     const question = `Clear ${labelList(preview.removed)} from this session, so TaintGuard stops refusing tools for it?`
     let answer: string | undefined
@@ -517,20 +522,19 @@ async function clearCommand($: Dollar, ctx: Ctx, e: CommandRunInput, rest: strin
   }
   let removed: string[] = []
   const after = await update($, taintAtom, (current) => {
-    const step = removeLabels(current, labels)
+    const step = removeLabels(current, preview.removed)
     removed = step.removed
     return step.next
   })
   if (removed.length === 0) return nothingToClearText()
-  try {
-    ctx.clearedThrough = lastToolUseId(await $.session.messages()) ?? ctx.clearedThrough
-  } catch {}
+  ctx.clearedThrough = cut ?? ctx.clearedThrough
   const at = await $.clock.now()
   await saveStore($, ctx, after, at)
   const still = after.labels.length > 0 ? labelList(after.labels) : 'none'
   append(ctx, at, { event: 'declassify', labels: removed, detail: `by /taintguard clear (${e.origin.kind}); still present: ${still}` })
   await syncHeadlessBand($, ctx)
-  return clearedText(removed, after.labels)
+  const arrived = after.labels.filter((label) => !before.labels.includes(label))
+  return clearedText(removed, after.labels, arrived)
 }
 
 async function reloadCommand($: Dollar, ctx: Ctx): Promise<string> {

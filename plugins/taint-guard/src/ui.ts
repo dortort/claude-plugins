@@ -375,11 +375,12 @@ export function explainReport(input: {
   return lines.join('\n')
 }
 
-/** The reply after a successful declassification. */
-export function clearedText(removed: readonly string[], remaining: readonly string[]): string {
+/** The reply after a successful declassification; `arrived` names labels added while the confirmation was open. */
+export function clearedText(removed: readonly string[], remaining: readonly string[], arrived: readonly string[] = []): string {
   if (removed.length === 0) return nothingToClearText()
   const rest = remaining.length > 0 ? `Still present: ${labelList(remaining)}.` : 'The session is clean.'
-  return `TaintGuard cleared ${labelList(removed)}. ${rest}`
+  const kept = arrived.length > 0 ? ` Kept ${labelList(arrived)}, which arrived while you were confirming.` : ''
+  return `TaintGuard cleared ${labelList(removed)}. ${rest}${kept}`
 }
 
 /** The reply when policy forbids declassification. */
