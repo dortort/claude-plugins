@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const repository = 'dortort/claude-plugins';
-export const managedPlugins = ['scheduler', 'artifact-callbacks', 'artifact-callbacks-channel'];
+export const managedPlugins = ['scheduler', 'artifact-callbacks', 'artifact-callbacks-channel', 'taint-guard'];
 const semver = /^\d+\.\d+\.\d+$/;
 const commitSha = /^[a-f0-9]{40}$/;
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -83,7 +83,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const catalog = JSON.parse(readFileSync(catalogPath, 'utf8'));
   if (command === 'check' && name === undefined) {
     checkCatalog(catalog);
-    console.log('All three managed plugins are pinned to exact releases');
+    console.log(`All ${managedPlugins.length} managed plugins are pinned to exact releases`);
   } else if (command === 'promote' && name && version) {
     const next = pinRelease(catalog, name, publishedRelease(name, version));
     checkCatalog(next);

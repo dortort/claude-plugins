@@ -48,6 +48,18 @@
         "sha": "66503ac17857845d26b2c380802ec3edf3fa138c"
       },
       "version": "0.1.1"
+    },
+    {
+      "name": "taint-guard",
+      "description": "Remember which sensitive or untrusted sources entered a session and refuse risky tool calls once they have",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/dortort/claude-plugins.git",
+        "path": "plugins/taint-guard",
+        "ref": "taint-guard--v0.1.0",
+        "sha": "52ea39bcf0d697cd7a7d219751a95ac8eeed0141"
+      },
+      "version": "0.1.0"
     }
   ]
 }

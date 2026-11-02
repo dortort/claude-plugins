@@ -12,6 +12,7 @@ claude plugin install dortort@dortort
 claude plugin install artifact-callbacks@dortort
 # Or use the research-preview channel alternative:
 claude plugin install artifact-callbacks-channel@dortort
+claude plugin install taint-guard@dortort
 ```
 
 Install any of them:
