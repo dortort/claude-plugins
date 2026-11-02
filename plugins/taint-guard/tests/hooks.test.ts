@@ -321,6 +321,13 @@ describe('switched off', () => {
     expect((await call($, 'Bash', { command: 'ls' })).deny).toContain('TaintGuard refused Bash.')
   })
 
+  test('the managed lock holds for a call that arrives before session.start', { options: { enabled: false } }, async ($, on) => {
+    const kit = engine(on, { files: EXAMPLE, managed: { pluginConfigs: { 'taint-guard@corp': { options: { enabled: true } } } } })
+    await call($, GMAIL_READ, { id: 'm1' })
+    expect((await call($, 'Bash', { command: 'ls' })).deny).toContain('TaintGuard refused Bash.')
+    expect(kit.ran.map((r) => r.tool)).toEqual([GMAIL_READ])
+  })
+
   test('a managed preset floor wins over a weaker user preset', { options: { preset: 'none' } }, async ($, on) => {
     const kit = engine(on, { managed: { pluginConfigs: { 'taint-guard': { options: { preset: 'strict' } } } } })
     await start($, kit)
