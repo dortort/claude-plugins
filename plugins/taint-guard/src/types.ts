@@ -1,7 +1,4 @@
-// The contract between TaintGuard's pure modules (src/*.ts) and its hooks
-// module. Nothing here touches `$`: every module under src/ is plain
-// TypeScript with erasable syntax, run both by the engine and by Node's
-// test runner, so it imports only types from here and siblings by `.ts` path.
+// Shared types of the pure modules under src/, which never touch `$`.
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
 
@@ -31,18 +28,7 @@ export type ToolSelector =
   | { regex: string; flags?: 'i' }
   | { anyOf: string[] }
 
-/**
- * A predicate on one argument, addressed by a JSON Pointer (RFC 6901) into the
- * call's arguments: the fields of the `tool.call` event other than `tool`,
- * `tool_use_id`, `agentId` and `consent`. Exactly one of `equals`, `matches`,
- * `notMatches`, `exists`; `flags: "i"` only with `matches` / `notMatches`.
- *
- * - `equals`: deep JSON equality with the value at the pointer.
- * - `matches`: the value is present and its text matches the regex (a string
- *   is its own text; any other JSON value is its `JSON.stringify`).
- * - `notMatches`: the value is absent, or its text does not match.
- * - `exists`: `true` holds when the pointer resolves, `false` when it does not.
- */
+/** One argument by JSON Pointer; `matches` needs the value present, `notMatches` holds when it is absent. */
 export type ArgumentPredicate = { pointer: string; flags?: 'i' } & (
   | { equals: JsonValue }
   | { matches: string }
@@ -80,11 +66,7 @@ export type SinkRule = {
   enabled?: boolean
 }
 
-/**
- * A reference to a rule of another (or the same) layer, by its namespaced id
- * (`preset:web-content`, `managed:gmail-read`), that switches it off. Honoured
- * only when the referring layer may disable that layer's rules (mergeLayers).
- */
+/** Switches off a rule by its namespaced id, when the referring layer may disable that layer's rules. */
 export type RuleRef = { id: string; enabled: false }
 
 export type PolicyFile = {
@@ -217,12 +199,7 @@ export type LoadedPolicy = {
 
 export type SinkMatch = { sink: CompiledSink; action: Action }
 
-/**
- * The verdict for one call on a taint set: the strictest action among the
- * active sinks that match (deny > ask > audit), `allow` when none matches.
- * `matches` lists every matching active sink, strictest first; `primary` is
- * the first of them.
- */
+/** The strictest matching active sink's action (deny > ask > audit), or allow; matches are strictest first. */
 export type SinkDecision = {
   action: 'allow' | Action
   matches: SinkMatch[]
