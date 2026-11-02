@@ -17,7 +17,7 @@ import {
 import type { CompiledSink, LayerText, LoadInput, Matcher, PolicyFile, PresetName, ToolCall } from '../../src/types.ts'
 
 const EXAMPLE: PolicyFile = {
-  $schema: 'https://taintguard.dev/schema/v1.json',
+  $schema: 'https://raw.githubusercontent.com/dortort/claude-plugins/main/plugins/taint-guard/schema/taint-guard.schema.json',
   version: 1,
   mode: 'enforce',
   subagents: 'shared',
