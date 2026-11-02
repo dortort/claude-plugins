@@ -126,6 +126,7 @@ export function engine(on: On, options: KitOptions = {}) {
   let now = T0
   const waits: Wait[] = []
   const faults = { clock: false }
+  let gate: Promise<void> | null = null
   const files = new Map<string, string>(Object.entries(options.files ?? {}))
   const store = new Map<string, unknown>(Object.entries(options.store ?? {}))
   const answers = [...(options.answers ?? [])]
@@ -186,8 +187,14 @@ export function engine(on: On, options: KitOptions = {}) {
 
   on('session.id', () => ({ value: sessionId }))
   on('session.cwd', () => ({ value: CWD }))
-  on('session.messages', (_$, e) => {
-    if (e.agentId === undefined) return { value: messages }
+  on('session.messages', async (_$, e) => {
+    if (e.agentId === undefined) {
+      const held = gate
+      const seen = messages
+      gate = null
+      if (held !== null) await held
+      return { value: seen }
+    }
     const found = agents[e.agentId]
     return { value: found ?? { deny: `no agent ${e.agentId}` } }
   })
@@ -301,6 +308,15 @@ export function engine(on: On, options: KitOptions = {}) {
 
     answer(...next: Answer[]): void {
       answers.push(...next)
+    },
+
+    /** Holds the next main `$.session.messages()` until the returned function runs; it answers with the history as it stood when called. */
+    holdMessages(): () => void {
+      let release = (): void => undefined
+      gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      return release
     },
 
     setCompact(next: SessionCompactResult | undefined): void {
