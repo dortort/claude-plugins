@@ -10,6 +10,7 @@ import {
   findRecords,
   formatRecord,
   isOwnDenial,
+  lastToolUseId,
   parseStored,
   rebuild,
   removeLabels,
@@ -492,5 +493,42 @@ describe('store copy', () => {
     )
     assert.deepEqual(keys, ['taint:old', 'taint:broken'])
     assert.deepEqual(staleStoreKeys([['taint:fresh', toStored(snap, now - 2 * day)]], now, day), ['taint:fresh'])
+  })
+})
+
+describe('declassification cut point', () => {
+  const mail = use(MAIL, {}, { tool_use_id: 'toolu_mail', text: 'mail' })
+  const read = use('Read', { file_path: '/repo/.env' }, { tool_use_id: 'toolu_env', text: 'X=1' })
+  const later = use(MAIL, {}, { tool_use_id: 'toolu_later', text: 'more mail' })
+
+  it('lastToolUseId names the newest tool use', () => {
+    assert.equal(lastToolUseId([assistant([mail, read]), user('ok')]), 'toolu_env')
+    assert.equal(lastToolUseId([user('hi')]), undefined)
+  })
+
+  it('round-trips clearedThrough through the store copy', () => {
+    const stored = toStored(EMPTY_TAINT, 5, 'toolu_env')
+    assert.deepEqual(parseStored(JSON.parse(JSON.stringify(stored))), stored)
+    assert.equal(parseStored({ ...stored, clearedThrough: 3 }), null)
+  })
+
+  it('skips the history a declassification covered', () => {
+    const storeCopy = toStored(EMPTY_TAINT, 5, 'toolu_env')
+    const result = rebuild(input({ messages: [assistant([mail, read]), user(formatRecord(['secret']))], storeCopy }))
+    assert.deepEqual(result.snapshot.labels, ['secret'])
+    const none = rebuild(input({ messages: [assistant([mail, read])], storeCopy }))
+    assert.deepEqual(none.snapshot.labels, [])
+  })
+
+  it('replays sources after the cut', () => {
+    const storeCopy = toStored(EMPTY_TAINT, 5, 'toolu_env')
+    const result = rebuild(input({ messages: [assistant([mail, read]), user('ok'), assistant([later])], storeCopy }))
+    assert.deepEqual(result.snapshot.labels, ['private', 'untrusted'])
+  })
+
+  it('scans everything when the cut point is no longer in the history', () => {
+    const storeCopy = toStored(EMPTY_TAINT, 5, 'toolu_compacted_away')
+    const result = rebuild(input({ messages: [assistant([mail, read])], storeCopy }))
+    assert.deepEqual(result.snapshot.labels, ['private', 'secret', 'untrusted'])
   })
 })

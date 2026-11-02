@@ -265,6 +265,8 @@ export type StoredTaint = {
   labels: string[]
   firedBy: Firing[]
   savedAt: number
+  /** The last tool_use_id a user declassification covered: a rebuild replays only the history after it. */
+  clearedThrough?: string
 }
 
 /** The parts of `SessionMessage` the rebuild reads (`$.session.messages()`). */

@@ -131,6 +131,12 @@ export function isOwnDenial(text: string | undefined): boolean {
   return typeof text === 'string' && text.startsWith(OWN_DENIAL_PREFIX)
 }
 
+function cutAfter(messages: readonly MessageLike[], toolUseId: string | undefined): number {
+  if (toolUseId === undefined) return 0
+  const at = messages.findIndex((m) => m.toolUses.some((u) => u.tool_use_id === toolUseId))
+  return at === -1 ? 0 : at + 1
+}
+
 /** Rebuilds the taint set from history, the store copy and taint records; it only ever adds labels. */
 export function rebuild(input: RebuildInput): RebuildResult {
   const base = input.base ?? EMPTY_TAINT
@@ -157,7 +163,8 @@ export function rebuild(input: RebuildInput): RebuildResult {
 
   if (input.storeCopy) fire('store', '(saved taint)', input.storeCopy.labels)
 
-  const conversations: Array<readonly MessageLike[]> = [input.messages, ...(input.agentMessages ?? [])]
+  const cut = cutAfter(input.messages, input.storeCopy?.clearedThrough)
+  const conversations: Array<readonly MessageLike[]> = [input.messages.slice(cut), ...(input.agentMessages ?? [])]
   for (const messages of conversations) {
     for (const message of messages) {
       for (const use of message.toolUses) {
@@ -205,8 +212,20 @@ export function storeKey(sessionId: string): string {
   return STORE_PREFIX + sessionId
 }
 
-export function toStored(snapshot: TaintSnapshot, at: number): StoredTaint {
-  return { labels: [...snapshot.labels], firedBy: snapshot.firedBy.map(copyFiring), savedAt: at }
+export function toStored(snapshot: TaintSnapshot, at: number, clearedThrough?: string): StoredTaint {
+  const stored: StoredTaint = { labels: [...snapshot.labels], firedBy: snapshot.firedBy.map(copyFiring), savedAt: at }
+  if (clearedThrough !== undefined) stored.clearedThrough = clearedThrough
+  return stored
+}
+
+/** The id of the newest tool use in the conversation, the cut point a declassification records. */
+export function lastToolUseId(messages: readonly MessageLike[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const uses = messages[i]?.toolUses ?? []
+    const last = uses[uses.length - 1]
+    if (last) return last.tool_use_id
+  }
+  return undefined
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -235,7 +254,10 @@ export function parseStored(value: unknown): StoredTaint | null {
     if (!parsed) return null
     firedBy.push(parsed)
   }
-  return { labels: [...v.labels], firedBy, savedAt: v.savedAt }
+  if (v.clearedThrough !== undefined && typeof v.clearedThrough !== 'string') return null
+  const stored: StoredTaint = { labels: [...v.labels], firedBy, savedAt: v.savedAt }
+  if (typeof v.clearedThrough === 'string') stored.clearedThrough = v.clearedThrough
+  return stored
 }
 
 /** Store keys of taint copies that are unreadable or older than maxAgeMs. */
