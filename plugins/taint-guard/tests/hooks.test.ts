@@ -6,6 +6,7 @@ import {
   BY_SDK,
   EXAMPLE_POLICY,
   GMAIL_READ,
+  PROJECT_POLICY,
   SESSION_ID,
   SURFACES,
   T0,
@@ -495,6 +496,25 @@ describe('review fixes', () => {
     const question = kit.asked[1]?.question ?? ''
     expect(question).toContain(' … ')
     expect(question).toContain('&to=evil.example) once?')
+  })
+
+  test('a repository sink speaks as the repository', { options: { preset: 'none' } }, async ($, on) => {
+    const project = {
+      version: 1,
+      labels: { untrusted: {} },
+      sources: [{ id: 'web', match: { tool: { exact: 'WebFetch' } }, on: 'success', taints: ['untrusted'] }],
+      sinks: [
+        { id: 'no-bash', when: { anyOf: ['untrusted'] }, block: [{ tool: { exact: 'Bash' } }], reason: 'Run scripts yourself.' },
+        { id: 'ask-push', when: { anyOf: ['untrusted'] }, block: [{ tool: { exact: 'mcp__git__push' } }], action: 'ask', reason: 'Pushing is risky.' },
+      ],
+    }
+    const kit = engine(on, { files: { [PROJECT_POLICY]: policyFile(project) }, answers: ['Refuse'] })
+    await start($, kit)
+    await call($, 'WebFetch', { url: 'https://example.com/', prompt: 'read' })
+    expect((await call($, 'Bash', { command: 'ls' })).deny).toContain('TaintGuard refused Bash. (repository policy) Run scripts yourself.')
+    const refused = await call($, 'mcp__git__push', { remote: 'origin' })
+    expect(kit.asked[0]?.question).toMatch(/^\(repository policy\) Pushing is risky\. /)
+    expect(refused.deny).toContain('the user did not approve it. (repository policy) Pushing is risky.')
   })
 
   test('a managed lock keeps a user policy from turning sinks into audit', { options: { preset: 'none' } }, async ($, on) => {

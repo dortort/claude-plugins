@@ -64,6 +64,7 @@ import {
   promptContextLine,
   refusalCountLine,
   refusalLogLine,
+  sinkReason,
   sourceTools,
   statusReport,
   taintContextLine,
@@ -619,13 +620,14 @@ async function guardCall(
   const primary = decision.primary
   if (primary !== undefined) {
     const rule = primary.sink.id
-    const words = { tool: call.tool, reason: primary.sink.reason, labels: held, fromTools: sourceTools(before), rule, lockdown }
+    const reason = sinkReason(primary.sink.reason, primary.sink.trusted)
+    const words = { tool: call.tool, reason, labels: held, fromTools: sourceTools(before), rule, lockdown }
     if (decision.action === 'deny') {
       await callEntry(ctx, 'deny', call, at, { rule, labels: held })
       return refuse($, ctx, call.tool, rule, denyText(words))
     }
     if (decision.action === 'ask') {
-      if (!(await askUser($, call, primary.sink.reason, held))) {
+      if (!(await askUser($, call, reason, held))) {
         await callEntry(ctx, 'ask-refused', call, at, { rule, labels: held })
         return refuse($, ctx, call.tool, rule, askRefusedText(words))
       }

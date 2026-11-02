@@ -22,6 +22,7 @@ import {
   promptContextLine,
   refusalCountLine,
   refusalLogLine,
+  sinkReason,
   sourceTools,
   statusReport,
   taintContextLine,
@@ -542,6 +543,14 @@ describe('askSummary', () => {
     const cyclic: Record<string, unknown> = {}
     cyclic.self = cyclic
     assert.equal(askSummary('mcp__x__send', cyclic), '[unprintable arguments]')
+  })
+})
+
+describe('sinkReason', () => {
+  it('marks a repository reason and leaves trusted ones alone', () => {
+    assert.equal(sinkReason('Bash is off.', false), '(repository policy) Bash is off.')
+    assert.equal(sinkReason('Bash is off.', true), 'Bash is off.')
+    assert.equal(sinkReason('', false), '')
   })
 })
 
