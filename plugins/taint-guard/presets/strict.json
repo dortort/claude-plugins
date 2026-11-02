@@ -61,6 +61,20 @@
       ]
     },
     {
+      "id": "web-mcp",
+      "description": "Any tool on a web, browser or fetch MCP server",
+      "match": {
+        "tool": {
+          "regex": "^mcp__(?=(?:[^_]|_(?!_))*__)(?:[^_]|_(?!_))*?(?:fetch|browser|chrome|puppeteer|playwright|selenium|crawl|scrape|tavily|brave|web)",
+          "flags": "i"
+        }
+      },
+      "on": "success",
+      "taints": [
+        "untrusted"
+      ]
+    },
+    {
       "id": "secret-files",
       "description": "Reading a secret file",
       "match": {
@@ -132,6 +146,12 @@
         {
           "tool": {
             "regex": "^mcp__(?=(?:[^_]|_(?!_))*__(?!(?:[\\s\\S]*[_-])?(?:(?:get|read|search|list|fetch|download|history)|(?:send|post|reply|forward|create|update|upload|share|schedule|comment|invite))))(?:[^_]|_(?!_))*?(?:gmail|google_mail|google-mail|googlemail|outlook|mail|drive|gdrive|google_drive|google-drive|docs|google_docs|notion|onedrive|sharepoint|slack|teams|chat)",
+            "flags": "i"
+          }
+        },
+        {
+          "tool": {
+            "regex": "^mcp__(?=(?:[^_]|_(?!_))*__)(?:[^_]|_(?!_))*?(?:fetch|browser|chrome|puppeteer|playwright|selenium|crawl|scrape|tavily|brave|web)",
             "flags": "i"
           }
         },

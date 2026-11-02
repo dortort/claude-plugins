@@ -171,7 +171,7 @@ describe('/taintguard', () => {
     expect(status).toContain('user:no-shell-after-mail (deny): Bash is disabled because this session has read private mail or secrets.')
     expect(status).toContain('Refused now: Bash')
     expect(status).toContain('Policy layers (preset: trifecta)')
-    expect(status).toContain('preset: loaded, 7 rules, presets/trifecta.json')
+    expect(status).toContain('preset: loaded, 8 rules, presets/trifecta.json')
     expect(status).toContain(`user: loaded, 5 rules, ${USER_POLICY}`)
     expect(status).toContain('project: absent, 0 rules, /work/.claude/taint-guard.json')
     expect(await command($, 'status')).toBe(status)
