@@ -146,8 +146,9 @@ Check it before you ship it: `/taintguard reload` in a test session reports any 
 the file validates against the [policy schema](../schema/taint-guard.schema.json) with any
 JSON Schema draft 2020-12 validator. An invalid managed policy, or one that exists but
 cannot be read, puts every session in **lockdown**: every label is treated as present and
-the `strict` preset's rules are added, so a broken file fails closed. A path where no file
-exists is treated as no managed layer, so verify that the layer loads (step 4).
+the `strict` preset's rules are added, so a broken file fails closed. So does a
+`managedPolicyPath` that names no file: a missing managed policy is a lockdown, never
+"no managed layer".
 
 ## 3. Write the managed settings
 
@@ -221,8 +222,8 @@ organization's mod and keeps running
 2. **Managed layer.** Run `/taintguard`. The heading reads `TaintGuard: clean`, and under
    *Policy layers* the managed layer reads
    `managed: loaded, <n> rules, /etc/claude-code/taint-guard.json` next to the preset you
-   set as a floor. `absent` means no file at that path; `invalid` with an error means the
-   session is in lockdown.
+   set as a floor. `invalid` with an error (`file not found`, a JSON or schema error) means
+   the session is in lockdown.
 3. **A rule fires.** Run `/taintguard explain Bash {"command":"ls"}` (allowed while clean),
    have Claude read a file named `.env`, then run the same `explain`: it names the rule that
    refuses Bash.

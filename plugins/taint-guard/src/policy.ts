@@ -669,6 +669,10 @@ export function loadPolicy(input: LoadInput, presets: Readonly<Record<PresetName
       reject(layer, path, `cannot read: ${file.readError}`)
       continue
     }
+    if (file.text === null && layer === 'managed') {
+      reject(layer, path, 'file not found')
+      continue
+    }
     if (file.text === null) {
       statuses.set(layer, { layer, path, status: 'absent', rules: 0 })
       continue
