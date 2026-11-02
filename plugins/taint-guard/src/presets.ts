@@ -90,9 +90,9 @@ export const MCP_WRITE_REGEX = `^mcp__${SERVER_CHAR}*__${VERB_AT}${WRITE}`
 export const WEB_TOOL_REGEX = onServerWith(WEB_TOKENS, '')
 /** A mail-family MCP tool whose tool segment ends in create_draft. */
 export const MAIL_CREATE_DRAFT_REGEX = onServerWith(MAIL_TOKENS, `${VERB_AT}create_draft$`)
-/** A path whose last segment names a secret file: .env files, SSH keys, credentials, keys and certificates. */
+/** A path or glob naming a secret file: .env files, SSH keys, credentials, keys, certificates and CLI login stores. */
 export const SECRET_FILE_REGEX =
-  '(^|[\\\\/])(?:\\.env(?!\\.(?:example|sample|template|dist)$)[^\\\\/]*|id_(?:rsa|dsa|ecdsa|ed25519)|credentials|\\.netrc|\\.pgpass|\\.npmrc|[^\\\\/]*\\.pem|[^\\\\/]*\\.key)$'
+  '(^|[\\\\/])(?:\\.env(?!\\.(?:example|sample|template|dist)$)[^\\\\/]*|id_(?:rsa|dsa|ecdsa|ed25519)|credentials|\\.git-credentials|\\.netrc|\\.pgpass|\\.npmrc|[^\\\\/]*\\.pem|[^\\\\/]*\\.key|gh[\\\\/]hosts\\.yml|\\.docker[\\\\/]config\\.json|\\.kube[\\\\/]config)$'
 
 const PATTERN_WORDS: ReadonlyMap<string, string> = new Map([
   [`/${MCP_WRITE_REGEX}/i`, `MCP tools that ${WRITE_VERBS.slice(0, -1).join(', ')} or ${WRITE_VERBS.at(-1)}`],
@@ -153,6 +153,13 @@ const SOURCES: NonNullable<PolicyFile['sources']> = [
     id: 'secret-grep',
     description: 'Searching a secret file',
     match: { tool: { exact: 'Grep' }, arguments: [{ pointer: '/path', matches: SECRET_FILE_REGEX, flags: 'i' }] },
+    on: 'attempt',
+    taints: ['secret'],
+  },
+  {
+    id: 'secret-grep-glob',
+    description: 'Searching files whose glob names a secret file',
+    match: { tool: { exact: 'Grep' }, arguments: [{ pointer: '/glob', matches: SECRET_FILE_REGEX, flags: 'i' }] },
     on: 'attempt',
     taints: ['secret'],
   },
