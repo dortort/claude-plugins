@@ -14,7 +14,7 @@ import {
 import { parseClearArgs, parseExplainArgs, toolsReport } from '../src/inventory.ts'
 import { effectivePreset, expandHome, ignoredManagedPathWarning, managedOptionsFrom } from '../src/managed.ts'
 import { activeSummary, allLabels, evaluateSinks, failSafeDecision, isSinkActive, loadPolicy, matchSources } from '../src/policy.ts'
-import { PRESETS, classifyTool } from '../src/presets.ts'
+import { PRESETS, classifyTool, describePattern } from '../src/presets.ts'
 import {
   EMPTY_TAINT,
   addFiring,
@@ -239,6 +239,11 @@ function auditLockdown(ctx: Ctx, at: number): void {
   if (ctx.enabled && lockdown) append(ctx, at, { event: 'lockdown', detail: lockdown })
 }
 
+async function isOn($: Dollar, ctx: Ctx): Promise<boolean> {
+  await ensureLoaded($, ctx)
+  return ctx.enabled
+}
+
 async function ensureLoaded($: Dollar, ctx: Ctx): Promise<LoadedPolicy> {
   if (ctx.loaded !== null) return ctx.loaded
   if (ctx.sessionId === '') ctx.sessionId = await $.session.id()
@@ -352,7 +357,12 @@ async function applyRebuild($: Dollar, ctx: Ctx, origin: string, result: Rebuild
 }
 
 async function summaryFor($: Dollar, policy: CompiledPolicy, labels: readonly string[]): Promise<ActiveSummary> {
-  return activeSummary(policy, new Set(labels), await read($, toolsAtom))
+  const summary = activeSummary(policy, new Set(labels), await read($, toolsAtom))
+  return {
+    ...summary,
+    deniedPatterns: summary.deniedPatterns.map(describePattern),
+    askedPatterns: summary.askedPatterns.map(describePattern),
+  }
 }
 
 async function syncHeadlessBand($: Dollar, ctx: Ctx): Promise<void> {
@@ -681,7 +691,7 @@ async function classicStart(
 ): Promise<void> {
   const previous = ctx.sessionId
   await switchSession(ctx, e.session_id)
-  if (!ctx.enabled) return
+  if (!(await isOn($, ctx))) return
   const { policy } = await ensureLoaded($, ctx)
   const at = await $.clock.now()
   if (e.source === 'clear') {
@@ -788,7 +798,7 @@ export const register: Register = (on, rawOptions) => {
   }).catch(($, e, next) => next(e))
 
   on('tool.call', async ($, e, next) => {
-    if (!ctx.enabled) return next(e)
+    if (!(await isOn($, ctx))) return next(e)
     return guardCall($, ctx, e, () => next(e))
   }).catch(async ($, e, next) => {
     const failure = { kind: next.error.kind, called: next.called, ...(next.error.message === undefined ? {} : { message: next.error.message }) }
@@ -802,12 +812,12 @@ export const register: Register = (on, rawOptions) => {
 
   on('classic.Stop', async ($, e, next) => {
     const tasks = e.background_tasks ?? []
-    if (ctx.enabled && tasks.length > 0) await noteBackground($, ctx, tasks)
+    if (tasks.length > 0 && (await isOn($, ctx))) await noteBackground($, ctx, tasks)
     return next(e)
   }).catch(($, e, next) => next(e))
 
   on('tool.describe', async ($, e, next) => {
-    if (ctx.enabled) await noteTool($, ctx, e.tool)
+    if (await isOn($, ctx)) await noteTool($, ctx, e.tool)
     return next(e)
   }).catch(($, e, next) => next(e))
 
@@ -818,7 +828,7 @@ export const register: Register = (on, rawOptions) => {
   }).catch(($, e, next) => next(e))
 
   on('session.compact', async ($, e, next) => {
-    if (!ctx.enabled) return next(e)
+    if (!(await isOn($, ctx))) return next(e)
     const labels = [...(await read($, taintAtom)).labels]
     if (labels.length === 0) return next(e)
     const result = await next({ ...e, instructions: compactInstructions(e.instructions, labels) })
@@ -829,7 +839,7 @@ export const register: Register = (on, rawOptions) => {
   }).catch(($, e, next) => next(e))
 
   on('prompt.submit', async ($, e, next) => {
-    if (!ctx.enabled) return next(e)
+    if (!(await isOn($, ctx))) return next(e)
     const line = await promptContext($, ctx)
     return line === null ? next(e) : next({ ...e, context: [...(e.context ?? []), line] })
   }).catch(($, e, next) => next(e))
