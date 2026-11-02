@@ -75,7 +75,7 @@ export function injectionEval(): { pass: boolean; report: string; strict: Inject
   const lines = [
     '## Injection eval (deterministic replay)',
     '',
-    `${inModel.length} scenarios: ${sources} source tools (email, web page, document, chat; local MCP servers, claude.ai connectors, built-in web tools) x ${CHANNELS.length} exfiltration channels over ${channels} tools (Bash, WebFetch, outbound MCP writes), ${strict.attempts} exfiltration calls. Every ask is answered Refuse.`,
+    `${inModel.length} scenarios: ${sources} source tools (email, web page, document, chat; local MCP servers, claude.ai connectors, built-in web tools) x ${CHANNELS.length} exfiltration channels over ${channels} tools (Bash, WebFetch, outbound MCP writes, a web MCP fetch), ${strict.attempts} exfiltration calls. Every ask is answered Refuse.`,
     '',
     table(
       ['preset', 'exfil calls', 'executed', 'denied', 'ask refused', 'target', 'result'],
