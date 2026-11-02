@@ -366,6 +366,7 @@ describe('spec acceptance at the regex level', () => {
           ['web-mcp', 'success', ['untrusted']],
           ['secret-files', 'attempt', ['secret']],
           ['secret-grep', 'attempt', ['secret']],
+          ['secret-grep-glob', 'attempt', ['secret']],
         ],
       )
     }
@@ -407,23 +408,44 @@ describe('egress and secret reads through the loader', () => {
       assert.deepEqual(taints(name, 'mcp__claude-in-chrome__get_page_text', { tabId: 1 }, 'attempt'), [])
     })
   }
+
+  const secretReads: Array<[string, Record<string, unknown>]> = [
+    ['Grep', { pattern: 'KEY', path: '/work', glob: '.env*' }],
+    ['Grep', { pattern: 'KEY', glob: '**/.env' }],
+    ['Grep', { pattern: 'KEY', path: '/work/.env' }],
+    ['Read', { file_path: '/home/u/.git-credentials' }],
+    ['Read', { file_path: '/home/u/.config/gh/hosts.yml' }],
+    ['Read', { file_path: '/home/u/.docker/config.json' }],
+    ['Read', { file_path: '/home/u/.kube/config' }],
+  ]
+  for (const [tool, args] of secretReads) {
+    it(`taints secret on ${tool} ${JSON.stringify(args)}`, () => {
+      assert.deepEqual(taints('trifecta', tool, args, 'attempt'), ['secret'])
+    })
+  }
+
+  it('leaves a Grep with no path and no glob, or an ordinary glob, untainted', () => {
+    assert.deepEqual(taints('trifecta', 'Grep', { pattern: 'KEY' }, 'attempt'), [])
+    assert.deepEqual(taints('trifecta', 'Grep', { pattern: 'KEY', path: '/work', glob: '*.ts' }, 'attempt'), [])
+  })
 })
 
 describe('secret-file regex', () => {
   const policy = preset('trifecta')
-  const predicates = ['secret-files', 'secret-grep'].map((id) => {
+  const predicates = ['secret-files', 'secret-grep', 'secret-grep-glob'].map((id) => {
     const rule = source(policy, id)
     const predicate = rule.match.arguments?.[0]
     assert.ok(predicate && 'matches' in predicate)
     return { tool: rule.match.tool, pointer: predicate.pointer, regex: new RegExp(predicate.matches, predicate.flags ?? '') }
   })
 
-  it('reads /file_path for Read and /path for Grep', () => {
+  it('reads /file_path for Read and /path and /glob for Grep', () => {
     assert.deepEqual(
       predicates.map(({ tool, pointer }) => [tool, pointer]),
       [
         [{ exact: 'Read' }, '/file_path'],
         [{ exact: 'Grep' }, '/path'],
+        [{ exact: 'Grep' }, '/glob'],
       ],
     )
   })
@@ -445,6 +467,22 @@ describe('secret-file regex', () => {
     '/repo/.npmrc',
     '/etc/ssl/cert.pem',
     '/etc/ssl/server.KEY',
+    '~/.git-credentials',
+    '/home/u/.git-credentials',
+    '~/.config/gh/hosts.yml',
+    'C:\\Users\\u\\AppData\\Roaming\\GitHub CLI\\gh\\hosts.yml',
+    '/home/u/.docker/config.json',
+    'C:\\Users\\u\\.docker\\config.json',
+    '/home/u/.kube/config',
+    'C:\\Users\\u\\.kube\\config',
+    '.env*',
+    '**/.env',
+    '**/.env.*',
+    '*.pem',
+    '**/*.key',
+    '**/id_rsa',
+    '**/credentials',
+    '.netrc',
   ]
   const ordinary = [
     '/repo/.env.example',
@@ -460,6 +498,17 @@ describe('secret-file regex', () => {
     '/repo/.env/readme.md',
     '/repo/keys.ts',
     '/repo/src/index.ts',
+    '/repo/.git-credentials.example',
+    '/repo/git-credentials',
+    '/repo/hosts.yml',
+    '/repo/ugh/hosts.yml',
+    '/repo/docker/config.json',
+    '/repo/.docker/config.json.bak',
+    '/repo/.kube/config.yaml',
+    '/repo/kube/config',
+    '*.ts',
+    '**/*.env.example',
+    '*',
     '',
   ]
   for (const path of secret) {
@@ -534,6 +583,10 @@ describe('preset regex safety', () => {
     `mcp__${'chrom'.repeat(2000)}`,
     `mcp__${'fetc_'.repeat(2000)}__`,
     `mcp__${'puppetee'.repeat(1250)}__${'_web'.repeat(1250)}`,
+    `${'/gh'.repeat(3333)}/hosts.ym`,
+    `${'/.kube'.repeat(1667)}/confi`,
+    `${'/.docker'.repeat(1250)}/config.jso`,
+    `${'.git-credential'.repeat(667)}/`,
   ]
 
   it('collects every preset regex', () => assert.ok(patterns.length >= 12, `${patterns.length}`))

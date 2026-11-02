@@ -84,7 +84,7 @@
         "arguments": [
           {
             "pointer": "/file_path",
-            "matches": "(^|[\\\\/])(?:\\.env(?!\\.(?:example|sample|template|dist)$)[^\\\\/]*|id_(?:rsa|dsa|ecdsa|ed25519)|credentials|\\.netrc|\\.pgpass|\\.npmrc|[^\\\\/]*\\.pem|[^\\\\/]*\\.key)$",
+            "matches": "(^|[\\\\/])(?:\\.env(?!\\.(?:example|sample|template|dist)$)[^\\\\/]*|id_(?:rsa|dsa|ecdsa|ed25519)|credentials|\\.git-credentials|\\.netrc|\\.pgpass|\\.npmrc|[^\\\\/]*\\.pem|[^\\\\/]*\\.key|gh[\\\\/]hosts\\.yml|\\.docker[\\\\/]config\\.json|\\.kube[\\\\/]config)$",
             "flags": "i"
           }
         ]
@@ -104,7 +104,27 @@
         "arguments": [
           {
             "pointer": "/path",
-            "matches": "(^|[\\\\/])(?:\\.env(?!\\.(?:example|sample|template|dist)$)[^\\\\/]*|id_(?:rsa|dsa|ecdsa|ed25519)|credentials|\\.netrc|\\.pgpass|\\.npmrc|[^\\\\/]*\\.pem|[^\\\\/]*\\.key)$",
+            "matches": "(^|[\\\\/])(?:\\.env(?!\\.(?:example|sample|template|dist)$)[^\\\\/]*|id_(?:rsa|dsa|ecdsa|ed25519)|credentials|\\.git-credentials|\\.netrc|\\.pgpass|\\.npmrc|[^\\\\/]*\\.pem|[^\\\\/]*\\.key|gh[\\\\/]hosts\\.yml|\\.docker[\\\\/]config\\.json|\\.kube[\\\\/]config)$",
+            "flags": "i"
+          }
+        ]
+      },
+      "on": "attempt",
+      "taints": [
+        "secret"
+      ]
+    },
+    {
+      "id": "secret-grep-glob",
+      "description": "Searching files whose glob names a secret file",
+      "match": {
+        "tool": {
+          "exact": "Grep"
+        },
+        "arguments": [
+          {
+            "pointer": "/glob",
+            "matches": "(^|[\\\\/])(?:\\.env(?!\\.(?:example|sample|template|dist)$)[^\\\\/]*|id_(?:rsa|dsa|ecdsa|ed25519)|credentials|\\.git-credentials|\\.netrc|\\.pgpass|\\.npmrc|[^\\\\/]*\\.pem|[^\\\\/]*\\.key|gh[\\\\/]hosts\\.yml|\\.docker[\\\\/]config\\.json|\\.kube[\\\\/]config)$",
             "flags": "i"
           }
         ]
