@@ -14,7 +14,9 @@
     "test:unit": "node --test \"tests/unit/*.spec.ts\"",
     "test:e2e": "node --test \"tests/e2e/*.spec.ts\"",
     "test:hooks": "claude plugin test .",
-    "validate": "claude plugin validate ."
+    "validate": "claude plugin validate .",
+    "eval": "node evals/run.ts",
+    "eval:live": "node evals/live.ts"
   },
   "license": "MIT",
   "devDependencies": {
