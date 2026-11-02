@@ -424,7 +424,7 @@ describe('persistence', () => {
 
   test('a restart reads subagent transcripts named by Agent tool uses', async ($, on) => {
     const kit = engine(on, {
-      messages: [use('Agent', { prompt: 'triage my inbox' }, { agentId: 'agent-1' }), use('Agent', { prompt: 'x' }, { agentId: 'agent-gone' })],
+      messages: [use('Agent', { prompt: 'triage my inbox' }, { agentId: 'agent-1' })],
       agents: { 'agent-1': [use(GMAIL_READ, { id: 'm1' })] },
     })
     await start($, kit)

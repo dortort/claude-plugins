@@ -28,6 +28,8 @@ export type RebuildInput = {
   onUnknownHistory: UnknownHistory
   storeCopy: StoredTaint | null
   historyLimit: number
+  /** History that could not be read (an unreadable store copy or subagent, a cut transcript): counts like a cut main history. */
+  unknownHistory?: boolean
   at: number
   base?: TaintSnapshot
 }
@@ -137,6 +139,11 @@ function cutAfter(messages: readonly MessageLike[], toolUseId: string | undefine
   return at === -1 ? 0 : at + 1
 }
 
+/** The messages after a declassification's cut point; all of them when the cut is unset or not found. */
+export function afterCut<M extends MessageLike>(messages: readonly M[], toolUseId: string | undefined): M[] {
+  return messages.slice(cutAfter(messages, toolUseId))
+}
+
 /** Rebuilds the taint set from history, the store copy and taint records; it only ever adds labels. */
 export function rebuild(input: RebuildInput): RebuildResult {
   const base = input.base ?? EMPTY_TAINT
@@ -163,8 +170,7 @@ export function rebuild(input: RebuildInput): RebuildResult {
 
   if (input.storeCopy) fire('store', '(saved taint)', input.storeCopy.labels)
 
-  const cut = cutAfter(input.messages, input.storeCopy?.clearedThrough)
-  const conversations: Array<readonly MessageLike[]> = [input.messages.slice(cut), ...(input.agentMessages ?? [])]
+  const conversations: Array<readonly MessageLike[]> = [afterCut(input.messages, input.storeCopy?.clearedThrough), ...(input.agentMessages ?? [])]
   for (const messages of conversations) {
     for (const message of messages) {
       for (const use of message.toolUses) {
@@ -195,7 +201,7 @@ export function rebuild(input: RebuildInput): RebuildResult {
     }
   }
 
-  const truncated = input.messages.length >= input.historyLimit
+  const truncated = input.messages.length >= input.historyLimit || input.unknownHistory === true
   if (truncated && input.onUnknownHistory === 'assume-tainted') fire('history-cut', '(history cut)', input.declaredLabels)
 
   const baseLabels = new Set(base.labels)
