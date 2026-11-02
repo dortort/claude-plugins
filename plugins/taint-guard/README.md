@@ -195,7 +195,8 @@ invalid managed or user layer, an unreadable policy file, or a failed read of ma
 settings puts TaintGuard in **lockdown**: every label is treated as present, the `strict`
 preset's rules are added, `mode` is `enforce`, and the band shows the error in red. An
 invalid project layer is dropped with a warning, so a repository cannot switch protection
-off by breaking its file. A policy file that does not exist is simply absent.
+off by breaking its file. A user or project policy file that does not exist is simply
+absent; a managed policy path that names no file is a lockdown.
 
 ### Example policy
 

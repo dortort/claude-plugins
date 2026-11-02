@@ -536,6 +536,19 @@ describe('loadPolicy: layers', () => {
     assert.deepEqual(loaded.policy.sinks, [])
   })
 
+  it('locks down when the configured managed policy file does not exist', () => {
+    const loaded = load({ managed: { layer: 'managed', path: '/etc/tg.json', text: null } }, PRESETS)
+    assert.equal(loaded.lockdown, 'managed policy /etc/tg.json: file not found')
+    assert.deepEqual(loaded.layers.find((l) => l.layer === 'managed'), {
+      layer: 'managed',
+      path: '/etc/tg.json',
+      status: 'invalid',
+      rules: 0,
+      error: 'file not found',
+    })
+    assert.ok(loaded.policy.sinks.some((s) => s.id === 'preset:outbound'))
+  })
+
   it('orders rules managed, user, project, preset', () => {
     const loaded = load(
       {
