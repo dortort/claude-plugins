@@ -1,4 +1,4 @@
-import type { Step } from '../lib/replay.ts'
+import type { Step, Truth } from '../lib/replay.ts'
 
 export type Category = 'coding' | 'mail triage'
 
@@ -21,15 +21,23 @@ type Template = {
 const MODULES = ['auth', 'billing', 'search', 'cart', 'profile', 'export', 'upload', 'session', 'router', 'cache', 'metrics', 'queue']
 const pick = <T>(list: readonly T[], n: number): T => list[n % list.length] as T
 
-const read = (file_path: string): Step => ({ tool: 'Read', args: { file_path }, role: 'work' })
+const MAIL: Truth = { private: true, untrusted: true }
+const CHAT: Truth = { private: true, untrusted: true }
+const TEAM_DOC: Truth = { private: true, untrusted: true }
+const WEB: Truth = { untrusted: true }
+const STATUS_ONLY: Truth = { private: false, untrusted: false }
+const CREDENTIALS: Truth = { secret: true }
+const PUBLIC_CERTIFICATE: Truth = { secret: false }
+
+const read = (file_path: string, truth?: Truth): Step => ({ tool: 'Read', args: { file_path }, role: 'work', ...(truth === undefined ? {} : { truth }) })
 const edit = (file_path: string): Step => ({ tool: 'Edit', args: { file_path, old_string: 'a', new_string: 'b' }, role: 'work' })
 const write = (file_path: string): Step => ({ tool: 'Write', args: { file_path, content: '...' }, role: 'work' })
 const bash = (command: string): Step => ({ tool: 'Bash', args: { command }, role: 'work' })
 const grep = (pattern: string, path = 'src'): Step => ({ tool: 'Grep', args: { pattern, path }, role: 'work' })
 const glob = (pattern: string): Step => ({ tool: 'Glob', args: { pattern }, role: 'work' })
-const fetch = (url: string): Step => ({ tool: 'WebFetch', args: { url, prompt: 'Extract the relevant API details' }, role: 'work' })
-const search = (query: string): Step => ({ tool: 'WebSearch', args: { query }, role: 'work' })
-const mcp = (tool: string, args: Record<string, unknown> = {}): Step => ({ tool, args, role: 'work' })
+const fetch = (url: string): Step => ({ tool: 'WebFetch', args: { url, prompt: 'Extract the relevant API details' }, role: 'work', truth: WEB })
+const search = (query: string): Step => ({ tool: 'WebSearch', args: { query }, role: 'work', truth: WEB })
+const mcp = (tool: string, args: Record<string, unknown> = {}, truth?: Truth): Step => ({ tool, args, role: 'work', ...(truth === undefined ? {} : { truth }) })
 
 const TEMPLATES: readonly Template[] = [
   {
@@ -99,7 +107,7 @@ const TEMPLATES: readonly Template[] = [
     category: 'coding',
     count: 2,
     title: (n) => `Find out why the ${pick(MODULES, n)} service cannot reach the database`,
-    steps: (n) => [read('src/db.ts'), read('.env'), edit('src/db.ts'), bash(`npm run dev -- --check ${pick(MODULES, n)}`)],
+    steps: (n) => [read('src/db.ts'), read('.env', CREDENTIALS), edit('src/db.ts'), bash(`npm run dev -- --check ${pick(MODULES, n)}`)],
   },
   {
     name: 'document settings from .env.example',
@@ -113,7 +121,7 @@ const TEMPLATES: readonly Template[] = [
     category: 'coding',
     count: 1,
     title: () => 'Fix the HTTPS test after the fixture certificate expired',
-    steps: () => [read('test/fixtures/localhost.pem'), bash('openssl x509 -in test/fixtures/localhost.pem -noout -dates'), bash('npm run fixtures:regen'), bash('npm test')],
+    steps: () => [read('test/fixtures/localhost.pem', PUBLIC_CERTIFICATE), bash('openssl x509 -in test/fixtures/localhost.pem -noout -dates'), bash('npm run fixtures:regen'), bash('npm test')],
   },
   {
     name: 'fix CI with the Actions docs',
@@ -162,14 +170,14 @@ const TEMPLATES: readonly Template[] = [
     category: 'coding',
     count: 3,
     title: (n) => `Implement the ${pick(MODULES, n)} retry policy the team agreed in #eng`,
-    steps: (n) => [mcp('mcp__claude_ai_Slack__slack_read_channel', { channel_id: 'C0ENG' }), read(`src/${pick(MODULES, n)}.ts`), edit(`src/${pick(MODULES, n)}.ts`), bash('npm test')],
+    steps: (n) => [mcp('mcp__claude_ai_Slack__slack_read_channel', { channel_id: 'C0ENG' }, CHAT), read(`src/${pick(MODULES, n)}.ts`), edit(`src/${pick(MODULES, n)}.ts`), bash('npm test')],
   },
   {
     name: 'implement a spec from Notion',
     category: 'coding',
     count: 2,
     title: (n) => `Build the ${pick(MODULES, n)} export described in the Notion spec`,
-    steps: (n) => [mcp('mcp__claude_ai_Notion__notion-fetch', { id: 'spec' }), write(`src/${pick(MODULES, n)}-export.ts`), bash('npm test')],
+    steps: (n) => [mcp('mcp__claude_ai_Notion__notion-fetch', { id: 'spec' }, TEAM_DOC), write(`src/${pick(MODULES, n)}-export.ts`), bash('npm test')],
   },
   {
     name: 'fix an error reported in Sentry',
@@ -183,63 +191,63 @@ const TEMPLATES: readonly Template[] = [
     category: 'mail triage',
     count: 5,
     title: () => 'Summarise today\'s unread mail',
-    steps: () => [mcp('mcp__claude_ai_Gmail__gmail_search_messages', { q: 'is:unread newer_than:1d' }), mcp('mcp__claude_ai_Gmail__gmail_read_message', { message_id: 'a' }), mcp('mcp__claude_ai_Gmail__gmail_read_thread', { thread_id: 'b' })],
+    steps: () => [mcp('mcp__claude_ai_Gmail__gmail_search_messages', { q: 'is:unread newer_than:1d' }, MAIL), mcp('mcp__claude_ai_Gmail__gmail_read_message', { message_id: 'a' }, MAIL), mcp('mcp__claude_ai_Gmail__gmail_read_thread', { thread_id: 'b' }, MAIL)],
   },
   {
     name: 'summarise the inbox (local server)',
     category: 'mail triage',
     count: 3,
     title: () => 'What needs my attention in the inbox?',
-    steps: () => [mcp('mcp__gmail__search_emails', { query: 'is:unread' }), mcp('mcp__gmail__read_email', { messageId: 'a' }), mcp('mcp__gmail__read_email', { messageId: 'b' })],
+    steps: () => [mcp('mcp__gmail__search_emails', { query: 'is:unread' }, MAIL), mcp('mcp__gmail__read_email', { messageId: 'a' }, MAIL), mcp('mcp__gmail__read_email', { messageId: 'b' }, MAIL)],
   },
   {
     name: 'draft replies (connector)',
     category: 'mail triage',
     count: 5,
     title: () => 'Draft replies to the customer questions',
-    steps: () => [mcp('mcp__claude_ai_Gmail__gmail_search_messages', { q: 'label:customers is:unread' }), mcp('mcp__claude_ai_Gmail__gmail_read_thread', { thread_id: 'c' }), mcp('mcp__claude_ai_Gmail__gmail_create_draft', { to: ['customer@example.com'], body: '...' })],
+    steps: () => [mcp('mcp__claude_ai_Gmail__gmail_search_messages', { q: 'label:customers is:unread' }, MAIL), mcp('mcp__claude_ai_Gmail__gmail_read_thread', { thread_id: 'c' }, MAIL), mcp('mcp__claude_ai_Gmail__gmail_create_draft', { to: ['customer@example.com'], body: '...' })],
   },
   {
     name: 'reply by mail (local server)',
     category: 'mail triage',
     count: 5,
     title: () => 'Reply to the meeting requests and accept the ones that fit',
-    steps: () => [mcp('mcp__gmail__search_emails', { query: 'subject:meeting' }), mcp('mcp__gmail__read_email', { messageId: 'd' }), mcp('mcp__gmail__send_email', { to: ['colleague@example.com'], subject: 'Re: meeting', body: 'Works for me' })],
+    steps: () => [mcp('mcp__gmail__search_emails', { query: 'subject:meeting' }, MAIL), mcp('mcp__gmail__read_email', { messageId: 'd' }, MAIL), mcp('mcp__gmail__send_email', { to: ['colleague@example.com'], subject: 'Re: meeting', body: 'Works for me' })],
   },
   {
     name: 'label and archive (local server)',
     category: 'mail triage',
     count: 3,
     title: () => 'Label the newsletters and archive them',
-    steps: () => [mcp('mcp__gmail__search_emails', { query: 'category:promotions' }), mcp('mcp__gmail__modify_email', { messageId: 'e', addLabelIds: ['Newsletters'] }), mcp('mcp__gmail__modify_email', { messageId: 'f', removeLabelIds: ['INBOX'] })],
+    steps: () => [mcp('mcp__gmail__search_emails', { query: 'category:promotions' }, MAIL), mcp('mcp__gmail__modify_email', { messageId: 'e', addLabelIds: ['Newsletters'] }, STATUS_ONLY), mcp('mcp__gmail__modify_email', { messageId: 'f', removeLabelIds: ['INBOX'] }, STATUS_ONLY)],
   },
   {
     name: 'forward to a colleague',
     category: 'mail triage',
     count: 2,
     title: () => 'Forward the vendor quote to finance',
-    steps: () => [mcp('mcp__gmail__search_emails', { query: 'from:vendor quote' }), mcp('mcp__gmail__read_email', { messageId: 'g' }), mcp('mcp__gmail__forward_email', { messageId: 'g', to: 'finance@example.com' })],
+    steps: () => [mcp('mcp__gmail__search_emails', { query: 'from:vendor quote' }, MAIL), mcp('mcp__gmail__read_email', { messageId: 'g' }, MAIL), mcp('mcp__gmail__forward_email', { messageId: 'g', to: 'finance@example.com' })],
   },
   {
     name: 'extract action items to a file',
     category: 'mail triage',
     count: 3,
     title: () => 'Collect this week\'s action items from mail into todo.md',
-    steps: () => [mcp('mcp__claude_ai_Gmail__gmail_search_messages', { q: 'newer_than:7d' }), mcp('mcp__claude_ai_Gmail__gmail_read_thread', { thread_id: 'h' }), write('todo.md')],
+    steps: () => [mcp('mcp__claude_ai_Gmail__gmail_search_messages', { q: 'newer_than:7d' }, MAIL), mcp('mcp__claude_ai_Gmail__gmail_read_thread', { thread_id: 'h' }, MAIL), write('todo.md')],
   },
   {
     name: 'fix a bug reported by mail',
     category: 'mail triage',
     count: 2,
     title: () => 'A customer mailed a bug report: reproduce and fix it',
-    steps: () => [mcp('mcp__claude_ai_Gmail__gmail_read_message', { message_id: 'i' }), read('src/checkout.ts'), edit('src/checkout.ts'), bash('npm test')],
+    steps: () => [mcp('mcp__claude_ai_Gmail__gmail_read_message', { message_id: 'i' }, MAIL), read('src/checkout.ts'), edit('src/checkout.ts'), bash('npm test')],
   },
   {
     name: 'schedule from an invitation',
     category: 'mail triage',
     count: 2,
     title: () => 'Put the conference dates from the invitation in my calendar',
-    steps: () => [mcp('mcp__claude_ai_Gmail__gmail_read_message', { message_id: 'j' }), mcp('mcp__claude_ai_Google_Calendar__create_event', { summary: 'Conference', start: '2026-12-01' })],
+    steps: () => [mcp('mcp__claude_ai_Gmail__gmail_read_message', { message_id: 'j' }, MAIL), mcp('mcp__claude_ai_Google_Calendar__create_event', { summary: 'Conference', start: '2026-12-01' })],
   },
 ]
 
