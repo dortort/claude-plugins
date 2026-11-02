@@ -211,6 +211,7 @@ async function loadAll($: Dollar, ctx: Ctx, cwd: string): Promise<LoadedPolicy> 
     {
       preset: effective.preset,
       presetFromManaged: effective.fromManaged,
+      managedFloor: managed.enabled === true || managed.preset !== undefined,
       managed: managedLayer,
       user: userLayer,
       project: projectLayer,

@@ -484,3 +484,15 @@ describe('persistence', () => {
     expect(kit.store.get('audit-key')).toMatch(/^[0-9a-f]{64}$/)
   })
 })
+
+describe('review fixes', () => {
+  test('a managed lock keeps a user policy from turning sinks into audit', { options: { preset: 'none' } }, async ($, on) => {
+    const kit = engine(on, {
+      files: { [USER_POLICY]: policyFile({ ...EXAMPLE_POLICY, mode: 'audit' }) },
+      managed: { pluginConfigs: { 'taint-guard': { options: { enabled: true } } } },
+    })
+    await taintWithMail($, kit)
+    expect((await call($, 'Bash', { command: 'ls' })).deny).toContain('Rule: user:no-shell-after-mail.')
+    expect(await command($, '')).toContain('user policy cannot lower mode below the managed floor')
+  })
+})
