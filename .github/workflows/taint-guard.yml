@@ -1,0 +1,100 @@
+name: TaintGuard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/taint-guard/**'
+      - '.github/workflows/taint-guard.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'plugins/taint-guard/**'
+      - '.github/workflows/taint-guard.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: plugins/taint-guard
+    shell: bash
+
+permissions:
+  contents: read
+
+concurrency:
+  group: taint-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: Typecheck (node sources)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+      - name: Install dev dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+
+  unit:
+    name: Unit tests (${{ matrix.os }}, Node ${{ matrix.node-version }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: ['22.18.0', '24']
+    steps:
+      - name: Keep LF line endings on Windows
+        working-directory: .
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install dev dependencies
+        run: npm ci
+      - name: Unit, schema and docs tests
+        run: npm run test:unit
+      - name: Generated presets match src/presets.ts
+        run: node scripts/presets.ts --check
+
+  plugin:
+    name: Claude plugin validate and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Validate the plugin strictly
+        run: claude plugin validate --strict plugins/taint-guard
+      - name: Hooks module acceptance and behavior suites
+        run: claude plugin test plugins/taint-guard
+
+  e2e:
+    name: Real-session end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+      - name: Install dev dependencies
+        run: npm ci
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Real-session end-to-end (skips, saying why, without model access)
+        run: npm run test:e2e
