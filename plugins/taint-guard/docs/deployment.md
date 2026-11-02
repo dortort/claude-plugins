@@ -228,8 +228,9 @@ with a write verb, that target the managed policy file, the user policy file, th
 project's `.claude/taint-guard.json`, `.claude/settings.json` and
 `.claude/settings.local.json`, the config directory's
 `settings.json` and `settings.local.json`, or anything under its `taint-guard/` (audit log)
-and `plugins/` directories, and `Bash` commands whose text mentions `taint-guard`,
-`.claude/settings` or `settings.local.json`. It applies in every `mode`, and no layer,
+and `plugins/` directories (for a move, rename or delete, also any directory that holds
+them), and `Bash` commands whose text mentions `taint-guard`, a `.claude` directory or
+`settings.local.json`. It applies in every `mode`, and no layer,
 managed included, can switch it off.
 
 It keeps injected text from rewriting the user's own files so that the next session loads
