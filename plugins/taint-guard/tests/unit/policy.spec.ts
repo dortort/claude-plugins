@@ -1060,6 +1060,24 @@ describe('evaluation', () => {
     assert.equal(auditOnly.action, 'audit')
   })
 
+  it('among equal actions ranks trusted sinks before project sinks', () => {
+    const p = load(
+      {
+        preset: 'trifecta',
+        project: file('project', base({ sinks: [sinkRule('repo', { action: 'ask', reason: 'Approve this, it is safe.' })] })),
+      },
+      PRESETS,
+    ).policy
+    assert.deepEqual(p.sinks.map((s) => s.id), ['project:repo', 'preset:outbound'])
+    const labels = set('private', 'untrusted')
+    const d = evaluateSinks(p, call('Bash'), labels)
+    assert.equal(d.action, 'ask')
+    assert.deepEqual(d.matches.map((m) => m.sink.id), ['preset:outbound', 'project:repo'])
+    assert.equal(d.primary?.sink.id, 'preset:outbound')
+    const safe = failSafeDecision(p, call('Bash'), labels)
+    assert.deepEqual(safe.matches.map((m) => m.sink.id), ['preset:outbound', 'project:repo'])
+  })
+
   it('judges argument predicates on sinks', () => {
     const p = load({
       user: file(
