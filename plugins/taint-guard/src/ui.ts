@@ -53,34 +53,71 @@ function compactJson(args: Readonly<Record<string, unknown>>): string {
   }
 }
 
-/** A one-line summary of a call's arguments, cut with '…' at `max` characters. */
-export function argSummary(tool: string, args: Readonly<Record<string, unknown>>, max = 120): string {
-  let text: string | undefined
+function pickedText(tool: string, args: Readonly<Record<string, unknown>>): string | undefined {
   switch (tool) {
     case 'Bash':
-      text = str(args.command)
-      break
+      return str(args.command)
     case 'WebFetch':
-      text = str(args.url)
-      break
+      return str(args.url)
     case 'WebSearch':
-      text = str(args.query)
-      break
+      return str(args.query)
     case 'Read':
     case 'Write':
     case 'Edit':
     case 'NotebookEdit':
-      text = str(args.file_path) ?? str(args.notebook_path)
-      break
+      return str(args.file_path) ?? str(args.notebook_path)
     case 'Grep':
     case 'Glob': {
       const pattern = str(args.pattern)
       const path = str(args.path)
-      if (pattern !== undefined) text = path === undefined ? pattern : `${pattern} in ${path}`
-      break
+      if (pattern === undefined) return undefined
+      return path === undefined ? pattern : `${pattern} in ${path}`
     }
+    default:
+      return undefined
   }
-  return oneLine(text ?? compactJson(args), max)
+}
+
+/** A one-line summary of a call's arguments, cut with '…' at `max` characters. */
+export function argSummary(tool: string, args: Readonly<Record<string, unknown>>, max = 120): string {
+  return oneLine(pickedText(tool, args) ?? compactJson(args), max)
+}
+
+/** Argument keys that usually say where data goes, listed first in an ask. */
+export const DESTINATION_KEYS: readonly string[] = [
+  'url',
+  'uri',
+  'channel',
+  'channel_id',
+  'to',
+  'recipient',
+  'recipients',
+  'email',
+  'repo',
+  'owner',
+  'path',
+  'file_path',
+  'command',
+  'query',
+]
+
+export const ASK_SUMMARY_MAX = 600
+const ASK_HEAD = 300
+const ASK_TAIL = 280
+
+function destinationFirst(args: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const key of DESTINATION_KEYS) if (Object.hasOwn(args, key)) out[key] = args[key]
+  for (const [key, value] of Object.entries(args)) if (!Object.hasOwn(out, key)) out[key] = value
+  return out
+}
+
+/** The argument summary an ask shows: destination keys first, and over 600 characters the head and the tail. */
+export function askSummary(tool: string, args: Readonly<Record<string, unknown>>): string {
+  const picked = tool.startsWith('mcp__') ? undefined : pickedText(tool, args)
+  const flat = (picked ?? compactJson(destinationFirst(args))).replace(/\s+/g, ' ').trim()
+  if (flat.length <= ASK_SUMMARY_MAX) return flat
+  return `${flat.slice(0, ASK_HEAD).trimEnd()} … ${flat.slice(-ASK_TAIL).trimStart()}`
 }
 
 function joinSentences(...parts: string[]): string {

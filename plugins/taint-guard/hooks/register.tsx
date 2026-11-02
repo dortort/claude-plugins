@@ -48,8 +48,8 @@ import type {
 import {
   ASK_ALLOW,
   ASK_REFUSE,
-  argSummary,
   askQuestion,
+  askSummary,
   askRefusedText,
   auditReport,
   bandText,
@@ -419,7 +419,7 @@ async function fireSources(
 }
 
 async function askUser($: Dollar, call: ToolCall, reason: string, labels: readonly string[]): Promise<boolean> {
-  const question = askQuestion({ tool: call.tool, argSummary: argSummary(call.tool, call.args), reason, labels })
+  const question = askQuestion({ tool: call.tool, argSummary: askSummary(call.tool, call.args), reason, labels })
   try {
     return (await $.ui.ask(question, { options: [ASK_ALLOW, ASK_REFUSE], header: HEADER })) === ASK_ALLOW
   } catch {
