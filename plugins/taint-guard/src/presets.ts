@@ -87,6 +87,18 @@ export const MAIL_CREATE_DRAFT_REGEX = onServerWith(MAIL_TOKENS, `${VERB_AT}crea
 export const SECRET_FILE_REGEX =
   '(^|[\\\\/])(?:\\.env(?!\\.(?:example|sample|template|dist)$)[^\\\\/]*|id_(?:rsa|dsa|ecdsa|ed25519)|credentials|\\.netrc|\\.pgpass|\\.npmrc|[^\\\\/]*\\.pem|[^\\\\/]*\\.key)$'
 
+const PATTERN_WORDS: ReadonlyMap<string, string> = new Map([
+  [`/${MCP_WRITE_REGEX}/i`, `MCP tools that ${WRITE_VERBS.slice(0, -1).join(', ')} or ${WRITE_VERBS.at(-1)}`],
+  [`/${PRIVATE_OTHER_REGEX}/i`, 'other tools on mail, documents or chat MCP servers'],
+  [`/${PRIVATE_READ_REGEX}/i`, 'read tools on mail, documents or chat MCP servers'],
+  [`/${MAIL_CREATE_DRAFT_REGEX}/i`, 'mail draft tools'],
+])
+
+/** Plain words for a preset's tool pattern; any other pattern is returned unchanged. */
+export function describePattern(pattern: string): string {
+  return PATTERN_WORDS.get(pattern) ?? pattern
+}
+
 const LABELS: PolicyFile['labels'] = {
   private: { description: 'Data the user owns: mail, documents, chats' },
   untrusted: { description: 'Text written by third parties' },
