@@ -836,6 +836,26 @@ describe('loadPolicy: globals', () => {
     })
   }
 
+  it('a project layer alone cannot lower mode, userDeclassify or onUnknownHistory below the defaults', () => {
+    const { policy, warnings } = globalsOf({ project: { mode: 'audit', userDeclassify: 'allow', onUnknownHistory: 'ignore' } })
+    assert.deepEqual(
+      [policy.mode, policy.userDeclassify, policy.userDeclassifyFrom, policy.onUnknownHistory],
+      ['enforce', 'confirm', 'default', 'assume-tainted'],
+    )
+    assert.deepEqual(warnings, [
+      'project policy cannot lower mode; the value is ignored',
+      'project policy cannot lower userDeclassify; the value is ignored',
+      'project policy cannot lower onUnknownHistory; the value is ignored',
+    ])
+  })
+
+  it('a project layer cannot lower a value a trusted layer set', () => {
+    const { policy } = globalsOf({ user: { mode: 'ask', userDeclassify: 'never' }, project: { mode: 'audit', userDeclassify: 'allow' } })
+    assert.equal(policy.mode, 'ask')
+    assert.equal(policy.userDeclassify, 'never')
+    assert.equal(policy.userDeclassifyFrom, 'user')
+  })
+
   const resetCases: Array<[string, Parameters<typeof globalsOf>[0], boolean, number]> = [
     ['managed value wins', { managed: { resetOnClear: false }, user: { resetOnClear: true } }, false, 0],
     ['user value without managed', { user: { resetOnClear: false } }, false, 0],

@@ -718,13 +718,22 @@ export function loadPolicy(input: LoadInput, presets: Readonly<Record<PresetName
     else warnings.push(`${actor} policy cannot disable ${id}; the rule stays on`)
   }
 
-  const policies = ordered.map((l) => l.policy)
-  const declaredMode = strictest(MODE_ORDER, policies.map((p) => p.mode)) ?? 'enforce'
-  const mode: Mode = lockdown === null ? declaredMode : 'enforce'
-  const userDeclassify = strictest(DECLASSIFY_ORDER, policies.map((p) => p.userDeclassify))
-  const declassifier = ordered.find((l) => userDeclassify !== undefined && l.policy.userDeclassify === userDeclassify)
-  const onUnknownHistory = strictest(UNKNOWN_HISTORY_ORDER, policies.map((p) => p.onUnknownHistory)) ?? 'assume-tainted'
   const byLayer = (name: LayerName): PolicyFile | undefined => ordered.find((l) => l.layer === name)?.policy
+  const trustedPolicies = ordered.filter((l) => l.layer !== 'project').map((l) => l.policy)
+  const projectPolicy = byLayer('project')
+  const tightened = <T extends string>(key: string, order: readonly T[], fallback: T, pick: (p: PolicyFile) => T | undefined): T | undefined => {
+    const base = strictest(order, trustedPolicies.map(pick))
+    const own = projectPolicy === undefined ? undefined : pick(projectPolicy)
+    if (own === undefined) return base
+    if (order.indexOf(own) < order.indexOf(base ?? fallback)) warnings.push(`project policy cannot lower ${key}; the value is ignored`)
+    return strictest(order, [base ?? fallback, own])
+  }
+  const declaredMode = tightened('mode', MODE_ORDER, 'enforce', (p) => p.mode) ?? 'enforce'
+  const mode: Mode = lockdown === null ? declaredMode : 'enforce'
+  const userDeclassify = tightened('userDeclassify', DECLASSIFY_ORDER, 'confirm', (p) => p.userDeclassify)
+  const declassifier = ordered.find((l) => userDeclassify !== undefined && l.policy.userDeclassify === userDeclassify)
+  const onUnknownHistory =
+    tightened('onUnknownHistory', UNKNOWN_HISTORY_ORDER, 'assume-tainted', (p) => p.onUnknownHistory) ?? 'assume-tainted'
   const projectReset = byLayer('project')?.resetOnClear
   if (projectReset !== undefined) warnings.push('project policy cannot set resetOnClear; the value is ignored')
   const resetOnClear = byLayer('managed')?.resetOnClear ?? byLayer('user')?.resetOnClear ?? true
