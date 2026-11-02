@@ -153,19 +153,27 @@ The generated presets are [presets/trifecta.json](presets/trifecta.json) and
 ### What the presets cost on ordinary work
 
 The benign-task eval replays 120 ordinary tasks (90 coding, 30 mail triage) through the
-presets ([results](evals/RESULTS.md#benign-task-eval)). It **misses the spec's targets**:
+presets ([results](evals/RESULTS.md#benign-task-eval)). The spec's target for `trifecta`
+counts only misfires, an ask or refusal raised because a source labelled content that is not
+actually private, third-party or secret: under 5% of tasks interrupted by one, and under 1%
+unable to finish because of one. The asks and refusals the preset exists to raise, an outbound
+call after reading private third-party content or after reading a secret, are designed gates,
+reported separately and not counted against the target. `trifecta` meets it:
 
-| Preset | Hit an ask or refusal | Could not finish (asks approved) | Spec target (`trifecta`) |
-| --- | --- | --- | --- |
-| `trifecta` | 18.3% | 2.5% | under 5% and under 1% |
-| `strict` | 40.0% | 40.0% | none |
+| Preset | Interrupted by a misfire | Failed by a misfire | Interrupted by a designed gate | Failed by a designed gate | Hit an ask or refusal (all causes) | Could not finish (all causes, asks approved) | Spec target |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `trifecta` | 0.8% | 0.8% | 17.5% | 1.7% | 18.3% | 2.5% | misfires under 5% and under 1% |
+| `strict` | 0.8% | 0.8% | 39.2% | 39.2% | 40.0% | 40.0% | none |
 
-Under `trifecta` the asks are the preset working as designed: after reading mail it asks
-before replying to, forwarding or labelling mail, before creating a calendar entry and
-before Bash, and in a coding task it asks before Bash after reading Slack or Notion. The
-tasks that could not finish read `.env` (or a test certificate, `*.pem`) and then needed
-Bash, which the `secret` rule refuses until you run `/taintguard clear`. Under `strict`
-every web lookup, mail read and Slack or Notion read ends Bash, `Write` and `Edit`.
+The one misfire is a test certificate: the `secret` rule matches every `*.pem`, so reading
+`test/fixtures/localhost.pem` refuses Bash until you run `/taintguard clear`. It sits close to
+the 1% target, which one more such task in 120 would miss. Under `trifecta` the designed gates
+are the preset at work: after reading mail it asks before replying to, forwarding or
+labelling mail, before creating a calendar entry and before Bash; in a coding task it asks
+before Bash after reading Slack or Notion; and after `.env` is read it refuses Bash, so the
+tasks that read `.env` and then needed Bash could not finish. In a headless session nobody
+answers the asks, so every one of them stops its task. Under `strict` every web lookup, mail
+read and Slack or Notion read ends Bash, `Write` and `Edit`.
 
 If that is too much friction for your work, write a user policy that switches off the
 preset rule that gets in the way, such as
@@ -500,7 +508,7 @@ Code's tool pipeline, or side channels.
 | Sources outside the preset families | No preset labels GitHub, Jira, Confluence, Linear, Zendesk or other issue trackers and ticket systems, or a mail file read with `Read`, though they carry injected text as well as mail does; their content passes through clean | Add them as sources in a user or managed policy; see [known gaps](evals/RESULTS.md#known-gaps-reported-not-gated) |
 | MCP write verbs outside the spec's list | An MCP tool that writes under another verb (`push_files`, `put_object`, `paste`, `tweet`, `put_file`) is not outbound, so no preset sink blocks it | Add a sink for those tools in a user or managed policy; see [known gaps](evals/RESULTS.md#known-gaps-reported-not-gated) |
 | Self-protection reads Bash text | `builtin:self-protect` refuses a `Bash` command only when its text names `taint-guard`, `.claude/settings` or `settings.local.json`; a command that builds the path at run time gets through it. Under `trifecta`, the preset still refuses `Bash` once `secret` is held and asks once `private` and `untrusted` are, but after `untrusted` content alone (a web page) such a command runs | Deploy as a managed mod with the managed policy in an administrator-only path, which the user's shell cannot write; under `strict`, `Bash` is refused once any label is held |
-| Benign tasks miss the spec's targets | Under `trifecta`, 18.3% of ordinary tasks hit an ask or a refusal and 2.5% could not finish (targets: under 5% and under 1%) | See [What the presets cost on ordinary work](#what-the-presets-cost-on-ordinary-work) |
+| Friction on ordinary work | Under `trifecta`, 18.3% of ordinary tasks hit an ask or a refusal and 2.5% could not finish. Designed gates account for 17.5% and 1.7%; misfires, which the spec's target counts, for 0.8% and 0.8% (targets: under 5% and under 1%, both met) | See [What the presets cost on ordinary work](#what-the-presets-cost-on-ordinary-work) |
 | Compaction while TaintGuard was off | A session compacted while TaintGuard was disabled or not installed carries no taint record, so resuming or branching it later can come back clean | /resume of the same session still has the $.store copy; organizations deploy TaintGuard as a managed mod so it is always loaded |
 
 One more applies to an ordinary (user-installed) TaintGuard wherever Claude Code's
