@@ -434,7 +434,10 @@ function textOf(value: unknown): string {
   return JSON.stringify(value) ?? String(value)
 }
 
-function compilePredicate(predicate: ArgumentPredicate): (args: unknown) => boolean {
+/** Where a matcher sits: over-long text makes a block or source predicate hold and an except predicate fail. */
+export type MatcherRole = 'block' | 'source' | 'except'
+
+function compilePredicate(predicate: ArgumentPredicate, role: MatcherRole): (args: unknown) => boolean {
   const { pointer } = predicate
   if ('equals' in predicate) {
     const expected = predicate.equals
@@ -449,10 +452,13 @@ function compilePredicate(predicate: ArgumentPredicate): (args: unknown) => bool
   }
   const negate = 'notMatches' in predicate
   const re = new RegExp('matches' in predicate ? predicate.matches : predicate.notMatches, predicate.flags ?? '')
+  const overCap = role !== 'except'
   return (args) => {
     const r = resolvePointer(args, pointer)
     if (!r.found) return negate
-    return re.test(capped(textOf(r.value))) !== negate
+    const text = textOf(r.value)
+    if (text.length > REGEX_TEXT_CAP) return overCap
+    return re.test(text) !== negate
   }
 }
 
@@ -495,9 +501,9 @@ function compileSelector(selector: ToolSelector): { kind: SelectorKind; matchesN
   return { kind: 'anyOf', matchesName: (tool) => names.has(tool), names: [...names], patterns: [] }
 }
 
-function buildMatcher(matcher: Matcher): MatcherParts {
+function buildMatcher(matcher: Matcher, role: MatcherRole): MatcherParts {
   const selector = compileSelector(matcher.tool)
-  const predicates = (matcher.arguments ?? []).map(compilePredicate)
+  const predicates = (matcher.arguments ?? []).map((predicate) => compilePredicate(predicate, role))
   const { matchesName } = selector
   const hasPredicates = predicates.length > 0
   return {
@@ -511,8 +517,8 @@ function buildMatcher(matcher: Matcher): MatcherParts {
 }
 
 /** Compiles a matcher's selector and argument predicates once. */
-export function compileMatcher(m: Matcher): CompiledMatcher {
-  return buildMatcher(m)
+export function compileMatcher(m: Matcher, role: MatcherRole = 'block'): CompiledMatcher {
+  return buildMatcher(m, role)
 }
 
 type SinkParts = { block: MatcherParts[]; except: MatcherParts[] }
@@ -543,7 +549,7 @@ function applyMode(declared: Action, mode: Mode): Action {
 }
 
 function compileSource(layer: LayerName, rule: SourceRule): CompiledSource {
-  const matcher = buildMatcher(rule.match)
+  const matcher = buildMatcher(rule.match, 'source')
   const source: CompiledSource = {
     id: `${layer}:${rule.id}`,
     layer,
@@ -558,8 +564,8 @@ function compileSource(layer: LayerName, rule: SourceRule): CompiledSource {
 }
 
 function compileSink(layer: LayerName, rule: SinkRule, mode: Mode): CompiledSink {
-  const block = rule.block.map(buildMatcher)
-  const except = (rule.except ?? []).map(buildMatcher)
+  const block = rule.block.map((m) => buildMatcher(m, 'block'))
+  const except = (rule.except ?? []).map((m) => buildMatcher(m, 'except'))
   const anyOf = [...(rule.when.anyOf ?? [])]
   const allOf = [...(rule.when.allOf ?? [])]
   const declared = rule.action ?? 'deny'
