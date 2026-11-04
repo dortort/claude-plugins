@@ -7,6 +7,7 @@
 import { parseArgs } from 'node:util';
 import { init } from './commands/init.js';
 import { sync } from './commands/sync.js';
+import { isFlagSet } from './flags.js';
 
 async function main() {
   const args = process.argv.slice(2);
@@ -129,8 +130,8 @@ async function main() {
           memory: values.memory !== undefined ? values.memory === 'true' : undefined,
           model: values.model as string | undefined,
           effort: values.effort as string | undefined,
-          clearModel: values['clear-model'] as boolean,
-          clearEffort: values['clear-effort'] as boolean,
+          clearModel: isFlagSet(values['clear-model']),
+          clearEffort: isFlagSet(values['clear-effort']),
         });
         console.log(JSON.stringify(result));
         process.exitCode = result.success ? 0 : 1;
