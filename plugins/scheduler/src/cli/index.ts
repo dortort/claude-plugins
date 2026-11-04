@@ -7,7 +7,7 @@
 import { parseArgs } from 'node:util';
 import { init } from './commands/init.js';
 import { sync } from './commands/sync.js';
-import { isFlagSet } from './flags.js';
+import { isFlagSet, parseAddArgs } from './flags.js';
 
 async function main() {
   const args = process.argv.slice(2);
@@ -51,34 +51,7 @@ async function main() {
 
       case 'add': {
         const { add } = await import('./commands/add.js');
-        const { values } = parseArgs({
-          args: args.slice(1),
-          options: {
-            name: { type: 'string' },
-            cron: { type: 'string' },
-            command: { type: 'string' },
-            'working-directory': { type: 'string' },
-            timeout: { type: 'string' },
-            'skip-permissions': { type: 'boolean', default: false },
-            description: { type: 'string' },
-            memory: { type: 'boolean', default: false },
-            model: { type: 'string' },
-            effort: { type: 'string' },
-          },
-          strict: false,
-        });
-        const result = await add({
-          name: values.name as string,
-          cron: values.cron as string,
-          command: values.command as string,
-          workingDirectory: values['working-directory'] as string,
-          timeout: values.timeout ? parseInt(values.timeout as string, 10) : undefined,
-          skipPermissions: values['skip-permissions'] as boolean,
-          description: values.description as string | undefined,
-          memory: values.memory as boolean,
-          model: values.model as string | undefined,
-          effort: values.effort as string | undefined,
-        });
+        const result = await add(parseAddArgs(args.slice(1)));
         console.log(JSON.stringify(result));
         process.exitCode = result.success ? 0 : 1;
         break;
