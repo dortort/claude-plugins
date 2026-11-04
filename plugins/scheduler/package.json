@@ -48,7 +48,7 @@
   "dependencies": {
     "croner": "^8.1.2",
     "cronstrue": "^3.32.0",
-    "zod": "^3.24.1"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
