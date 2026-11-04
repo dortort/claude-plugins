@@ -36,6 +36,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect code changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Skip the OS matrices for pull requests that change only the root docs
+        id: diff
+        working-directory: .
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          code=true
+          if git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            files=$(git diff --name-only "$BASE" HEAD)
+            if [ -n "$files" ] && ! printf '%s\n' "$files" | grep -vxE 'README\.md|RELEASING\.md' > /dev/null; then
+              code=false
+            fi
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   typecheck:
     name: Typecheck (node sources)
     runs-on: ubuntu-latest
@@ -54,6 +79,8 @@ jobs:
 
   node:
     name: Node tests (${{ matrix.os }}, Node ${{ matrix.node-version }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
@@ -61,6 +88,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         node-version: ['22.18.0', '24']
+        exclude:
+          - os: macos-latest
+            node-version: '22.18.0'
     steps:
       - name: Keep LF line endings on Windows
         working-directory: .
@@ -101,6 +131,8 @@ jobs:
 
   channel:
     name: Channel adapter (${{ matrix.os }}, Node ${{ matrix.node-version }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     defaults:
@@ -111,6 +143,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         node-version: ['22.18.0', '24']
+        exclude:
+          - os: macos-latest
+            node-version: '22.18.0'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
