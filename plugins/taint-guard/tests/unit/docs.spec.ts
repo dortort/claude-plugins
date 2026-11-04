@@ -355,6 +355,10 @@ describe('CI workflow', () => {
     assert.match(workflow, /node-version: \['22\.18\.0', '24'\]/)
   })
 
+  it('runs macOS on one Node version, since hosted macOS runners are scarce', () => {
+    assert.match(workflow, /exclude:\n {10}- os: macos-latest\n {12}node-version: '22\.18\.0'\n/)
+  })
+
   it('runs the real-session end-to-end test', () => {
     assert.match(workflow, /run: npm run test:e2e\n/)
   })
