@@ -7,7 +7,7 @@
 import { parseArgs } from 'node:util';
 import { init } from './commands/init.js';
 import { sync } from './commands/sync.js';
-import { isFlagSet, parseAddArgs } from './flags.js';
+import { parseAddArgs, parseUpdateArgs } from './flags.js';
 
 async function main() {
   const args = process.argv.slice(2);
@@ -74,38 +74,7 @@ async function main() {
 
       case 'update': {
         const { update } = await import('./commands/update.js');
-        const { values } = parseArgs({
-          args: args.slice(1),
-          options: {
-            id: { type: 'string' },
-            cron: { type: 'string' },
-            command: { type: 'string' },
-            timeout: { type: 'string' },
-            enabled: { type: 'string' },
-            name: { type: 'string' },
-            description: { type: 'string' },
-            memory: { type: 'string' },
-            model: { type: 'string' },
-            effort: { type: 'string' },
-            'clear-model': { type: 'boolean', default: false },
-            'clear-effort': { type: 'boolean', default: false },
-          },
-          strict: false,
-        });
-        const result = await update({
-          id: values.id as string,
-          cron: values.cron as string | undefined,
-          command: values.command as string | undefined,
-          timeout: values.timeout ? parseInt(values.timeout as string, 10) : undefined,
-          enabled: values.enabled !== undefined ? values.enabled === 'true' : undefined,
-          name: values.name as string | undefined,
-          description: values.description as string | undefined,
-          memory: values.memory !== undefined ? values.memory === 'true' : undefined,
-          model: values.model as string | undefined,
-          effort: values.effort as string | undefined,
-          clearModel: isFlagSet(values['clear-model']),
-          clearEffort: isFlagSet(values['clear-effort']),
-        });
+        const result = await update(parseUpdateArgs(args.slice(1)));
         console.log(JSON.stringify(result));
         process.exitCode = result.success ? 0 : 1;
         break;
