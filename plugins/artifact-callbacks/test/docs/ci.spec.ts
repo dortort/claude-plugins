@@ -84,6 +84,24 @@ describe('artifact-callbacks workflow', () => {
     assert.match(j, /npm run test:conformance\n/)
   })
 
+  test('runs macOS on one Node version, since hosted macOS runners are scarce', () => {
+    for (const name of ['node', 'channel']) {
+      assert.match(job(name), /exclude:\n {10}- os: macos-latest\n {12}node-version: '22\.18\.0'\n/, name)
+    }
+  })
+
+  test('skips the OS matrices only for pull requests that change just the root README or RELEASING', () => {
+    const c = job('changes')
+    assert.match(c, /fetch-depth: 0\n/)
+    // A release checks only its commit's run, so pushes to main must always run the matrices.
+    assert.match(c, /BASE: \$\{\{ github\.event\.pull_request\.base\.sha \}\}\n/)
+    assert.doesNotMatch(c, /github\.event\.before/)
+    assert.ok(c.includes("grep -vxE 'README\\.md|RELEASING\\.md'"))
+    for (const name of ['node', 'channel']) {
+      assert.match(job(name), /needs: changes\n {4}if: needs\.changes\.outputs\.code == 'true'\n/, name)
+    }
+  })
+
   test('the oldest Node in CI is the engines minimum', () => {
     const min = /^>=(\d+\.\d+\.\d+)$/.exec(pkg.engines?.node ?? '')
     assert.ok(min, 'engines.node is ">=x.y.z"')
