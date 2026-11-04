@@ -1,7 +1,5 @@
 ![dortort / claude-plugins: a terminal types claude plugin marketplace add dortort/claude-plugins and prints skills · plugins · mods, beside the dortort avatar](assets/banner.svg)
 
-# dortort Claude plugins
-
 The `dortort` marketplace for Claude Code plugins, mods, and agent skills.
 
 ## Install
