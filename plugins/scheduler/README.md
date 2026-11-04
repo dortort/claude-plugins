@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/dortort/claude-plugins/actions/workflows/ci.yml"><img src="https://github.com/dortort/claude-plugins/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
-  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node.js-%3E%3D18-green" alt="Node.js >= 18"></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node.js-%3E%3D22-green" alt="Node.js >= 22"></a>
   <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-strict-blue" alt="TypeScript"></a>
 </p>
 <p align="center">Schedule recurring and one-time AI tasks with Claude Code — powered by native OS schedulers (launchd / crontab).</p>
@@ -30,7 +30,7 @@
 
 ## Requirements
 
-- Node.js >= 18
+- Node.js >= 22
 - Claude Code CLI (`claude`)
 - macOS (launchd) or Linux (crontab)
 

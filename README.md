@@ -25,7 +25,7 @@ Install any of them:
 | `artifact-callbacks-channel` | The same, as a research-preview channel: clicks arrive as `<channel>` messages through the same listener | [`plugins/artifact-callbacks-channel`](plugins/artifact-callbacks-channel) | Tools `callbacks_done`, `callbacks_reply`, `callbacks_pause` and more |
 | `taint-guard` | Remembers which sensitive or untrusted sources entered a session and refuses risky tool calls once they have | [`plugins/taint-guard`](plugins/taint-guard) | `/taintguard` |
 
-The scheduler requires Node.js >= 18, the Claude Code CLI, and macOS or Linux.
+The scheduler requires Node.js >= 22, the Claude Code CLI, and macOS or Linux.
 See its [documentation](plugins/scheduler/README.md) for commands and configuration.
 Artifact Callbacks is a mod that needs Node.js >= 22.18, which runs its TypeScript
 listener directly (no build step, no Python). Use Claude Code **2.1.287+ in the

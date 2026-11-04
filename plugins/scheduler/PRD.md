@@ -271,7 +271,7 @@ Scheduled tasks are executed through a shared runtime installed under `~/.claude
 | NFR-C1 | macOS 12+ (launchd) | P0 | Done |
 | NFR-C2 | Linux with crontab | P0 | Done |
 | NFR-C3 | Windows 10+ with Task Scheduler | P1 | Deferred to v0.2.0 |
-| NFR-C4 | Node.js >= 18.0.0 | P0 | Done |
+| NFR-C4 | Node.js >= 22.0.0 | P0 | Done |
 | NFR-C5 | Claude Code CLI in PATH | P0 | Done |
 
 ---
