@@ -50,22 +50,4 @@ describe('executor: once-trigger .done marker', () => {
     const content = await readFile(doneFile, 'utf-8');
     expect(content).toBe('');
   });
-
-  it('config is NOT modified by executor (read-only invariant)', async () => {
-    // The executor reads config but never writes it back.
-    // We verify this by checking that saveConfig is not called.
-    const saveConfigMock = vi.fn();
-
-    vi.mock('../../../config.js', async () => {
-      const actual = await vi.importActual<typeof import('../../config.js')>('../../config.js');
-      return {
-        ...actual,
-        saveConfig: saveConfigMock,
-        loadConfig: vi.fn().mockResolvedValue({ version: 1, tasks: [] }),
-      };
-    });
-
-    // Executor does not call saveConfig — we just verify the mock was never called
-    expect(saveConfigMock).not.toHaveBeenCalled();
-  });
 });
