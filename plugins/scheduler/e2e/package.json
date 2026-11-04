@@ -9,12 +9,5 @@
   "devDependencies": {
     "agentry": "file:../../../../agentry/packages/cli",
     "tsx": "^4.19.2"
-  },
-  "pnpm": {
-    "overrides": {
-      "@agentry/core": "file:../../../../agentry/packages/core",
-      "@agentry/claude": "file:../../../../agentry/packages/claude",
-      "@agentry/mcp": "file:../../../../agentry/packages/mcp"
-    }
   }
 }

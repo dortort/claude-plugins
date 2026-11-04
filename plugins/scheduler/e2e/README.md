@@ -17,8 +17,8 @@ dependencies. It is **local-only** and never runs in CI.
   ```bash
   cd ../../../agentry && pnpm install && pnpm -r build
   ```
-  agentry is linked via `file:` in `package.json`; the `pnpm.overrides` there
-  rewrite its internal `workspace:*` deps to the sibling paths.
+  agentry is linked via `file:` in `package.json`; the `overrides` in
+  `pnpm-workspace.yaml` rewrite its internal `workspace:*` deps to the sibling paths.
 
 ## Running
 
