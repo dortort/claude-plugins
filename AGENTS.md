@@ -13,10 +13,10 @@ users only through a separate promotion PR, prepared with
 [RELEASING.md](RELEASING.md). A release task ends with that promotion PR opened, or
 reported to the user as the remaining step.
 
-Move the `scheduler`, `artifact-callbacks` and `artifact-callbacks-channel` pins with
-the promote command, which verifies the release before writing the entry. The
-`dortort` entry belongs to the separately maintained `dortort/skills` repository and
-keeps its own source.
+Move the `scheduler`, `artifact-callbacks`, `artifact-callbacks-channel` and
+`taint-guard` pins with the promote command, which verifies the release before writing
+the entry. The `dortort` entry belongs to the separately maintained `dortort/skills`
+repository and keeps its own source.
 
 ## Working in the repository
 
