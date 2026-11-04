@@ -8,6 +8,9 @@ overrides:
   '@agentry/core': file:../../../../agentry/packages/core
   '@agentry/claude': file:../../../../agentry/packages/claude
   '@agentry/mcp': file:../../../../agentry/packages/mcp
+  '@agentry/codex': file:../../../../agentry/packages/codex
+  '@agentry/gemini': file:../../../../agentry/packages/gemini
+  '@agentry/antigravity': file:../../../../agentry/packages/antigravity
 
 importers:
 
@@ -22,11 +25,20 @@ importers:
 
 packages:
 
+  '@agentry/antigravity@file:../../../../agentry/packages/antigravity':
+    resolution: {directory: ../../../../agentry/packages/antigravity, type: directory}
+
   '@agentry/claude@file:../../../../agentry/packages/claude':
     resolution: {directory: ../../../../agentry/packages/claude, type: directory}
 
+  '@agentry/codex@file:../../../../agentry/packages/codex':
+    resolution: {directory: ../../../../agentry/packages/codex, type: directory}
+
   '@agentry/core@file:../../../../agentry/packages/core':
     resolution: {directory: ../../../../agentry/packages/core, type: directory}
+
+  '@agentry/gemini@file:../../../../agentry/packages/gemini':
+    resolution: {directory: ../../../../agentry/packages/gemini, type: directory}
 
   '@agentry/mcp@file:../../../../agentry/packages/mcp':
     resolution: {directory: ../../../../agentry/packages/mcp, type: directory}
@@ -364,19 +376,31 @@ packages:
   undici-types@8.3.0:
     resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
 
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
 
+  '@agentry/antigravity@file:../../../../agentry/packages/antigravity':
+    dependencies:
+      '@agentry/core': file:../../../../agentry/packages/core
+
   '@agentry/claude@file:../../../../agentry/packages/claude':
+    dependencies:
+      '@agentry/core': file:../../../../agentry/packages/core
+
+  '@agentry/codex@file:../../../../agentry/packages/codex':
     dependencies:
       '@agentry/core': file:../../../../agentry/packages/core
 
   '@agentry/core@file:../../../../agentry/packages/core':
     dependencies:
       expect: 29.7.0
-      zod: 3.25.76
+      zod: 4.6.7
+
+  '@agentry/gemini@file:../../../../agentry/packages/gemini':
+    dependencies:
+      '@agentry/core': file:../../../../agentry/packages/core
 
   '@agentry/mcp@file:../../../../agentry/packages/mcp':
     dependencies:
@@ -511,8 +535,11 @@ snapshots:
 
   agentry@file:../../../../agentry/packages/cli:
     dependencies:
+      '@agentry/antigravity': file:../../../../agentry/packages/antigravity
       '@agentry/claude': file:../../../../agentry/packages/claude
+      '@agentry/codex': file:../../../../agentry/packages/codex
       '@agentry/core': file:../../../../agentry/packages/core
+      '@agentry/gemini': file:../../../../agentry/packages/gemini
       '@agentry/mcp': file:../../../../agentry/packages/mcp
 
   ansi-styles@4.3.0:
@@ -670,4 +697,4 @@ snapshots:
 
   undici-types@8.3.0: {}
 
-  zod@3.25.76: {}
+  zod@4.6.7: {}

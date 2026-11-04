@@ -1,0 +1,7 @@
+overrides:
+  '@agentry/core': file:../../../../agentry/packages/core
+  '@agentry/claude': file:../../../../agentry/packages/claude
+  '@agentry/mcp': file:../../../../agentry/packages/mcp
+  '@agentry/codex': file:../../../../agentry/packages/codex
+  '@agentry/gemini': file:../../../../agentry/packages/gemini
+  '@agentry/antigravity': file:../../../../agentry/packages/antigravity
