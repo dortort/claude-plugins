@@ -440,7 +440,7 @@ The package is distributed as a Claude Code plugin via npm. Users install it and
 
 | Requirement | Version |
 |-------------|---------|
-| Node.js | >= 18.0.0 |
+| Node.js | >= 22.0.0 |
 | TypeScript | ^5.7.2 |
 | Claude Code CLI | Latest (must be in PATH) |
 | OS | macOS 12+ (launchd), Linux (crontab) |
