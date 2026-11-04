@@ -164,7 +164,7 @@ npm run test:coverage  # Tests with coverage report
 npm run test:package   # Pack, install in a clean directory, and exercise the CLI
 ```
 
-CI runs automatically on every push and PR to `main` (lint, typecheck, test on Node 18+22, build).
+CI runs automatically on every push and PR to `main` (lint, typecheck, test on Node 22+24, build).
 
 ### Testing
 
@@ -204,8 +204,8 @@ the trusted publisher in npm to match the new repository name before releasing.
 Enable branch protection on `main` requiring these status checks to pass:
 - Lint
 - Typecheck
-- Test (Node 18)
 - Test (Node 22)
+- Test (Node 24)
 - Build
 
 ## Contributing
