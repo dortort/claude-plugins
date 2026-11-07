@@ -142,6 +142,19 @@ async function ensureTzSyncJob(): Promise<void> {
 </plist>
 `;
 
+  const current = await fs.readFile(plistPath, 'utf-8').catch(() => undefined);
+
+  // launchd sets XPC_SERVICE_NAME to the job label; unloading our own job would kill this process.
+  if (process.env.XPC_SERVICE_NAME === TZ_SYNC_LABEL) {
+    if (current !== plist) await writeFileAtomic(plistPath, plist);
+    return;
+  }
+
+  if (current === plist) {
+    const loaded = await defaultExec('launchctl', ['list', TZ_SYNC_LABEL]).then(() => true, () => false);
+    if (loaded) return;
+  }
+
   try {
     await defaultExec('launchctl', ['unload', plistPath]);
   } catch { /* not loaded */ }
