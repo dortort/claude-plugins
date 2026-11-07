@@ -109,6 +109,9 @@ function getTzSyncPlistPath(): string {
  * Runs at 3am local time daily to catch DST transitions.
  */
 async function ensureTzSyncJob(): Promise<void> {
+  // launchd sets XPC_SERVICE_NAME to the job label; reinstalling our own job would kill this process.
+  if (process.env.XPC_SERVICE_NAME === TZ_SYNC_LABEL) return;
+
   const cliShimPath = getCliShimPath();
   const logsDir = getLogsDir();
   const plistPath = getTzSyncPlistPath();
@@ -143,13 +146,6 @@ async function ensureTzSyncJob(): Promise<void> {
 `;
 
   const current = await fs.readFile(plistPath, 'utf-8').catch(() => undefined);
-
-  // launchd sets XPC_SERVICE_NAME to the job label; unloading our own job would kill this process.
-  if (process.env.XPC_SERVICE_NAME === TZ_SYNC_LABEL) {
-    if (current !== plist) await writeFileAtomic(plistPath, plist);
-    return;
-  }
-
   if (current === plist) {
     const loaded = await defaultExec('launchctl', ['list', TZ_SYNC_LABEL]).then(() => true, () => false);
     if (loaded) return;
