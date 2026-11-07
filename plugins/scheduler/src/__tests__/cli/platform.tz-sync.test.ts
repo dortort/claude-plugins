@@ -122,29 +122,31 @@ describe('registerTask on darwin: tz-sync job', () => {
     expect(tzSyncCalls().map(args => args[0])).toEqual(['list', 'unload', 'load']);
   });
 
-  it('never unloads or reloads the job from inside the tz-sync job itself', async () => {
+  it('never touches the job from inside the tz-sync job itself', async () => {
     vi.stubEnv('XPC_SERVICE_NAME', TZ_SYNC_LABEL);
     vi.mocked(fs.readFile).mockResolvedValue('<plist>old</plist>');
 
     await registerTask(task, '/fake/shim');
 
     expect(tzSyncCalls()).toEqual([]);
-    expect(tzSyncWrites()).toHaveLength(1);
+    expect(tzSyncWrites()).toHaveLength(0);
     expect(launchctlCalls().map(args => args[0])).toEqual(['unload', 'load']);
   });
 
-  it('does not rewrite an unchanged plist from inside the tz-sync job', async () => {
-    await registerTask(task, '/fake/shim');
-    const plist = tzSyncPlistWritten();
-    vi.mocked(exec).mockClear();
-    vi.mocked(writeFileAtomic).mockClear();
-    vi.mocked(fs.readFile).mockResolvedValue(plist);
+  it('leaves a plist change seen inside the job for the next registration to apply', async () => {
+    const files = new Map<string, string>();
+    vi.mocked(writeFileAtomic).mockImplementation(async (p, content) => {
+      files.set(p, content);
+    });
+    vi.mocked(fs.readFile).mockImplementation((async (p: string) => files.get(p) ?? '<plist>old</plist>') as never);
+
     vi.stubEnv('XPC_SERVICE_NAME', TZ_SYNC_LABEL);
-
+    await registerTask(task, '/fake/shim');
+    vi.stubEnv('XPC_SERVICE_NAME', '0');
+    vi.mocked(exec).mockClear();
     await registerTask(task, '/fake/shim');
 
-    expect(tzSyncCalls()).toEqual([]);
-    expect(tzSyncWrites()).toHaveLength(0);
+    expect(tzSyncCalls().map(args => args[0])).toEqual(['unload', 'load']);
   });
 
   it('does not touch the job for a task in local time', async () => {
