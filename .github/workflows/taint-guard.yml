@@ -6,11 +6,13 @@ on:
     paths:
       - 'plugins/taint-guard/**'
       - '.github/workflows/taint-guard.yml'
+      - 'scripts/validate-plugin*'
   pull_request:
     branches: [main]
     paths:
       - 'plugins/taint-guard/**'
       - '.github/workflows/taint-guard.yml'
+      - 'scripts/validate-plugin*'
   workflow_dispatch:
 
 defaults:
@@ -81,8 +83,10 @@ jobs:
           node-version: '22.18.0'
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
-      - name: Validate the plugin strictly
-        run: claude plugin validate --strict plugins/taint-guard
+      - name: Validation script tests
+        run: node --test scripts/validate-plugin.test.mjs
+      - name: Validate the plugin strictly, tolerating TS5097
+        run: node scripts/validate-plugin.mjs plugins/taint-guard
       - name: Hooks module acceptance and behavior suites
         run: claude plugin test plugins/taint-guard
 

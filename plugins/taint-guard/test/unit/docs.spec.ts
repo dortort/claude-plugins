@@ -343,7 +343,8 @@ describe('CI workflow', () => {
 
   it('validates strictly and runs the hooks suites with Claude Code', () => {
     assert.match(workflow, /npm install -g @anthropic-ai\/claude-code/)
-    assert.match(workflow, /claude plugin validate --strict plugins\/taint-guard\n/)
+    assert.match(workflow, /run: node --test scripts\/validate-plugin\.test\.mjs\n/)
+    assert.match(workflow, /run: node scripts\/validate-plugin\.mjs plugins\/taint-guard\n/)
     assert.match(workflow, /claude plugin test plugins\/taint-guard\n/)
   })
 

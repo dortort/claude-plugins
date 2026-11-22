@@ -551,11 +551,14 @@ declarations in `.claude-plugin/types/`, which Claude Code writes (git-ignored) 
 session loads the mod from this folder, for example under
 `claude --plugin-dir ./plugins/taint-guard`. CI has no session to write them, so there it
 runs `typecheck` and checks the hooks module with `claude plugin validate --strict` and
-`claude plugin test`. Do not load the mod into the session you develop it in: it would
-judge that session's own tool calls.
+`claude plugin test`. The strict validation goes through
+[`scripts/validate-plugin.mjs`](../../scripts/validate-plugin.mjs), which fails on every
+finding except TS5097: the validator's type check rejects the `.ts` import paths that
+Node.js needs to run `src/` and that Claude Code loads. Do not load the mod into the
+session you develop it in: it would judge that session's own tool calls.
 
 CI runs `typecheck`, the unit tests and the presets check on Linux, macOS and Windows,
-`claude plugin validate --strict`, `claude plugin test` and `test:e2e` in
+strict validation, `claude plugin test` and `test:e2e` in
 [`.github/workflows/taint-guard.yml`](../../.github/workflows/taint-guard.yml).
 
 ## License
