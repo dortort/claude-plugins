@@ -526,13 +526,15 @@ The hooks module ([hooks/register.tsx](hooks/register.tsx)) and the policy engin
 ([src/](src)) are TypeScript with erasable syntax only. Claude Code runs the hooks module
 directly; Node.js >= 22.18 runs the unit tests and scripts directly. There is no build
 step and nothing compiled is shipped. Node test files are named `*.spec.ts`, because
-`claude plugin test` treats every `*.test.ts` as a hooks suite.
+`claude plugin test` treats every `*.test.ts` as a hooks suite, and they live in `test/`,
+apart from the hooks suites in `tests/`, because `claude plugin validate` type-checks
+everything under `tests/` as hooks code.
 
 ```bash
 cd plugins/taint-guard
 npm ci                       # dev-only typescript, @types/node and ajv
 npm test                     # the node:test unit suites
-npm run test:unit            # the same: tests/unit/*.spec.ts (policy, presets, schema, state, audit, ui, docs)
+npm run test:unit            # the same: test/unit/*.spec.ts (policy, presets, schema, state, audit, ui, docs)
 npm run typecheck            # tsc --noEmit over src, scripts and the node test suites
 npm run typecheck:hooks      # tsc --noEmit over the hooks module and its suites (needs .claude-plugin/types)
 npm run validate             # claude plugin validate .: manifest, hooks module and the calls it makes

@@ -6,7 +6,7 @@ import { Ajv2020, type ErrorObject } from 'ajv/dist/2020.js'
 import { SCHEMA_ID } from '../../src/presets.ts'
 
 const ROOT = join(import.meta.dirname, '..', '..')
-const FIXTURES = join(ROOT, 'tests', 'fixtures', 'policies')
+const FIXTURES = join(ROOT, 'test', 'fixtures', 'policies')
 
 const readJson = (path: string): unknown => JSON.parse(readFileSync(path, 'utf8'))
 const jsonFiles = (dir: string): string[] =>
