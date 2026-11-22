@@ -1,7 +1,12 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directories: ["/plugins/scheduler", "/plugins/scheduler/e2e"]
+    directories:
+      - "/plugins/scheduler"
+      - "/plugins/scheduler/e2e"
+      - "/plugins/artifact-callbacks"
+      - "/plugins/artifact-callbacks-channel"
+      - "/plugins/taint-guard"
     schedule: { interval: weekly, day: monday }
     cooldown: { default-days: 7, semver-major-days: 14 }
     commit-message: { prefix: chore, include: scope }
