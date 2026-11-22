@@ -220,7 +220,10 @@ installed). The `validate` and `test:hooks` scripts need the `claude` CLI on `PA
 Code writes (git-ignored) each time a session loads the mod from this folder, for
 example under `claude --plugin-dir plugins/artifact-callbacks`. CI has no session to
 write them, so there it runs `typecheck:node` and checks the hooks module with
-`validate` and `test:hooks`.
+`test:hooks` and with strict validation through
+[`scripts/validate-plugin.mjs`](../../scripts/validate-plugin.mjs), which fails on every
+finding except TS5097: the validator's type check rejects the `.ts` import paths that
+Claude Code loads.
 `test:e2e` drives a real interactive session in tmux with real Chromium and needs
 `tmux`, Playwright's Chromium, `claude` and model access; it skips, saying which is
 missing, otherwise. [`test/e2e/README.md`](test/e2e/README.md) has the details.

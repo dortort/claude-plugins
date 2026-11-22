@@ -48,7 +48,8 @@ describe('artifact-callbacks workflow', () => {
 
   test('the validate script is run too', () => {
     assert.equal(scripts.validate, 'claude plugin validate .')
-    assert.ok(wf.includes('claude plugin validate "$dir"'))
+    assert.ok(wf.includes('node scripts/validate-plugin.mjs "$dir"'))
+    assert.ok(wf.includes('run: node --test scripts/validate-plugin.test.mjs\n'))
   })
 
   test('typechecks the node sources after npm ci; the hooks module needs engine-written types', () => {
@@ -126,7 +127,7 @@ describe('artifact-callbacks workflow', () => {
     const p = job('plugin')
     assert.match(p, /npm install -g @anthropic-ai\/claude-code/)
     assert.match(p, /claude plugin validate \.\n/)
-    assert.match(p, /claude plugin validate "\$dir"/)
+    assert.match(p, /node scripts\/validate-plugin\.mjs "\$dir"/)
     assert.match(p, /claude plugin test "\$dir"/)
     assert.match(job('docs'), /npm run test:docs\n/)
   })
