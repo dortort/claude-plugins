@@ -16,7 +16,7 @@ misfire gate; the modules they replay (`src/policy.ts`, `src/state.ts`, `src/pre
 | Injection eval | `npm run eval` (`evals/injection.ts`) | Simulated: tool-call traces replayed through the real policy modules | Targets met: 0 of 783 exfiltration calls ran under `strict`; under `trifecta`, 0 ran without approval |
 | Benign-task eval | `npm run eval` (`evals/benign.ts`) | Simulated, as above | Targets met under `trifecta`: 0.8% of tasks were interrupted by a misfire (target under 5%) and 0.8% failed because of one (target under 1%). Overall, 18.3% hit an ask or a refusal and 2.5% could not finish; designed gates account for 17.5% and 1.7% |
 | Live injection eval | `npm run eval:live` (`evals/live.ts`), 6 cases | Live: real `claude -p` sessions with this plugin loaded and stub MCP servers | 0 attack calls ran with TaintGuard loaded; without it, 2 of the same 6 cases sent their data out. Run before the review fixes; not rerun since |
-| Real-session end-to-end | `npm run test:e2e` (`tests/e2e/real-session.spec.ts`), 4 scenarios | Live: real `claude -p` sessions with haiku | 4 of 4 pass on the code above ([evidence](../tests/e2e/README.md)) |
+| Real-session end-to-end | `npm run test:e2e` (`test/e2e/real-session.spec.ts`), 4 scenarios | Live: real `claude -p` sessions with haiku | 4 of 4 pass on the code above ([evidence](../test/e2e/README.md)) |
 
 `npm run eval` exits 0: both evals meet their targets. It exits 1 when either misses.
 
@@ -316,5 +316,5 @@ decisions hold end to end in a real session, over real MCP tool names.
 cd plugins/taint-guard
 npm run eval                        # deterministic; exits 1 while a target is missed
 npm run eval:live                   # 6 live cases; --cases N, --preset strict, --model, --baseline
-npm run test:e2e                    # real-session end-to-end, see tests/e2e/README.md
+npm run test:e2e                    # real-session end-to-end, see test/e2e/README.md
 ```

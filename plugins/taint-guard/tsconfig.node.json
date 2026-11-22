@@ -15,5 +15,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*.ts", "tests/unit/**/*.ts", "tests/e2e/**/*.ts", "evals/**/*.ts", "scripts/**/*.ts"]
+  "include": ["src/**/*.ts", "test/unit/**/*.ts", "test/e2e/**/*.ts", "evals/**/*.ts", "scripts/**/*.ts"]
 }

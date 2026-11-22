@@ -10,7 +10,7 @@ import { PRESETS } from '../../src/presets.ts'
 import type { LoadInput, PresetName } from '../../src/types.ts'
 
 const ROOT = join(import.meta.dirname, '..', '..')
-const FIXTURES = join(ROOT, 'tests', 'fixtures', 'policies')
+const FIXTURES = join(ROOT, 'test', 'fixtures', 'policies')
 const readJson = (path: string): unknown => JSON.parse(readFileSync(path, 'utf8'))
 const files = (dir: string): string[] => readdirSync(dir).filter((name) => name.endsWith('.json')).sort()
 
