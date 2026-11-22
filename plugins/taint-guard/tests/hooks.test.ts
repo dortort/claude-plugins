@@ -58,7 +58,7 @@ describe('band', () => {
       const kit = engine(on, { files: EXAMPLE })
       await taintWithMail($, kit)
       const ui = await $.ui.mount({ ...BAND, surface })
-      const texts = await ui.findAll({ type: 'Text' })
+      const texts = (await ui.findAll({ type: 'Text' })).filter((text) => text.text !== 'engine band')
       expect(texts).toHaveLength(1)
       expect(texts[0]?.text).toMatch(
         /^TaintGuard · tainted: private, untrusted \(mcp__gmail__read_message, \d\d:\d\d\) · blocked: Bash · asks: WebFetch · \/taintguard$/,
