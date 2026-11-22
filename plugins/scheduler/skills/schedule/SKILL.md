@@ -1,5 +1,6 @@
 ---
-trigger: "schedule a task|schedule a.*task|add a scheduled task|set up.*scheduled task|automate.*task|create a scheduled"
+name: schedule
+description: Use when the user wants to schedule a task, add or set up a scheduled task, or automate a recurring or one-time task. Hands off to /scheduler:add, which gathers and validates the details.
 ---
 
 # Schedule a Task
