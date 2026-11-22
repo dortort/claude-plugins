@@ -11,6 +11,7 @@ on:
       - '.github/workflows/artifact-release.yml'
       - 'RELEASING.md'
       - 'scripts/*marketplace*'
+      - 'scripts/validate-plugin*'
   pull_request:
     branches: [main]
     paths:
@@ -21,6 +22,7 @@ on:
       - '.github/workflows/artifact-release.yml'
       - 'RELEASING.md'
       - 'scripts/*marketplace*'
+      - 'scripts/validate-plugin*'
   workflow_dispatch:
 
 defaults:
@@ -193,12 +195,14 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code
       - name: Validate the marketplace
         run: claude plugin validate .
-      - name: Validate the plugins
+      - name: Validation script tests
+        run: node --test scripts/validate-plugin.test.mjs
+      - name: Validate the plugins strictly, tolerating TS5097
         run: |
           for dir in plugins/artifact-callbacks*/; do
             if [ -f "$dir.claude-plugin/plugin.json" ]; then
-              echo "::group::claude plugin validate $dir"
-              claude plugin validate "$dir"
+              echo "::group::validate --strict $dir"
+              node scripts/validate-plugin.mjs "$dir"
               echo "::endgroup::"
             fi
           done
