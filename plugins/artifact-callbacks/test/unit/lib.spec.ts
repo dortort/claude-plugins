@@ -16,24 +16,24 @@ import {
 } from '../../sidecar/lib.ts'
 import type { EventBody, StdoutLine } from '../../sidecar/lib.ts'
 
-const SECRET = '0123456789abcdef0123456789abcdef'
+const TEST_KEY = '0123456789abcdef0123456789abcdef'
 
 describe('hmac', () => {
   test('hmacHex matches node crypto with utf8 key', () => {
-    const want = createHmac('sha256', SECRET).update('hello').digest('hex')
-    assert.equal(hmacHex(SECRET, 'hello'), want)
+    const want = createHmac('sha256', TEST_KEY).update('hello').digest('hex')
+    assert.equal(hmacHex(TEST_KEY, 'hello'), want)
     assert.match(want, /^[0-9a-f]{64}$/)
   })
   test('cookieValue is HMAC of the port as a string', () => {
-    assert.equal(cookieValue(SECRET, 51234), hmacHex(SECRET, '51234'))
-    assert.notEqual(cookieValue(SECRET, 1), cookieValue(SECRET, 2))
+    assert.equal(cookieValue(TEST_KEY, 51234), hmacHex(TEST_KEY, '51234'))
+    assert.notEqual(cookieValue(TEST_KEY, 1), cookieValue(TEST_KEY, 2))
   })
   test('cookieName is port scoped', () => {
     assert.equal(cookieName(51234), 'cb_session_51234')
   })
   test('pageToken prefixes page:', () => {
-    assert.equal(pageToken(SECRET, 'triage.html'), hmacHex(SECRET, 'page:triage.html'))
-    assert.notEqual(pageToken(SECRET, 'a.html'), pageToken(SECRET, 'b.html'))
+    assert.equal(pageToken(TEST_KEY, 'triage.html'), hmacHex(TEST_KEY, 'page:triage.html'))
+    assert.notEqual(pageToken(TEST_KEY, 'a.html'), pageToken(TEST_KEY, 'b.html'))
   })
   test('known vector', () => {
     // RFC 4231 test case 2
@@ -48,7 +48,7 @@ describe('hmac', () => {
     assert.equal(safeEqual('', ''), true)
   })
   test('SECRET_RE', () => {
-    assert.ok(SECRET_RE.test(SECRET))
+    assert.ok(SECRET_RE.test(TEST_KEY))
     assert.ok(!SECRET_RE.test('abc'))
     assert.ok(!SECRET_RE.test('z'.repeat(40)))
   })
